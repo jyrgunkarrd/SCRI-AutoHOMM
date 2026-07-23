@@ -91,6 +91,7 @@ end
 local BattleMap = require("src.sys.battle_map")
 local GameMap = require("src.sys.game_map")
 local SpawnerLogic = require("src.sys.spawner_logic")
+local FateLogic = require("src.sys.fate_logic")
 local Controls = require("src.input.controls")
 
 local DEFAULT_FONT_PATH = "assets/fonts/Furore.otf"
@@ -114,11 +115,18 @@ function love.load()
     if not entities then
         error("Failed to spawn map entities: " .. tostring(spawnError))
     end
+
+    local fateStacks, fateError = FateLogic.loadEntities(entities)
+
+    if not fateStacks then
+        error("Failed to load fate stacks: " .. tostring(fateError))
+    end
 end
 
 function love.draw()
     BattleMap.draw(GameMap.getColorMap())
     SpawnerLogic.draw()
+    FateLogic.draw()
     Controls.draw()
 end
 
@@ -128,4 +136,8 @@ end
 
 function love.mousepressed(x, y, button, isTouch, presses)
     Controls.mousepressed(x, y, button, isTouch, presses)
+end
+
+function love.wheelmoved(x, y)
+    Controls.wheelmoved(x, y)
 end

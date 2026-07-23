@@ -8,13 +8,13 @@ local fate_stacks = {
         id = "BSCSTACK",
         tiles = {
 
-            {slot = "BSC0", quantity = 6},
-            {slot = "BSC1", quantity = 5},
-            {slot = "BSC2", quantity = 1},
-            {slot = "BSCNEG1", quantity = 5},
-            {slot = "BSCNEG2", quantity = 1},
-            {slot = "BSCFAIL", quantity = 1},
-            {slot = "BSCCRIT", quantity = 1},
+            {slot = "NEUTRAL", quantity = 60},
+            {slot = "PLUS 1", quantity = 50},
+            {slot = "PLUS 2", quantity = 10},
+            {slot = "NEG 1", quantity = 50},
+            {slot = "NEG 2", quantity = 10},
+            {slot = "FAIL", quantity = 10},
+            {slot = "CRIT", quantity = 10},
 
         },
 

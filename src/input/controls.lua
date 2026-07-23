@@ -1,3 +1,5 @@
+local FateLogic = require("src.sys.fate_logic")
+
 local Controls = {}
 
 local PANEL_WIDTH = 520
@@ -61,33 +63,47 @@ function Controls.keypressed(key)
         return true
     end
 
-    return state.exitPromptOpen
+    if state.exitPromptOpen then
+        return true
+    end
+
+    return FateLogic.keypressed(key)
 end
 
 function Controls.mousepressed(x, y, button)
-    if not state.exitPromptOpen then
-        return false
-    end
+    if state.exitPromptOpen then
+        if button == 2 then
+            Controls.closeExitPrompt()
+            return true
+        end
 
-    if button == 2 then
-        Controls.closeExitPrompt()
+        if button ~= 1 then
+            return true
+        end
+
+        local layout = Controls.getExitPromptLayout()
+
+        if isInside(x, y, layout.yes) then
+            love.event.quit()
+        elseif isInside(x, y, layout.no)
+            or not isInside(x, y, layout.panel) then
+            Controls.closeExitPrompt()
+        end
+
         return true
     end
 
-    if button ~= 1 then
+    return FateLogic.mousepressed(x, y, button)
+end
+
+function Controls.wheelmoved(_, wheelY)
+    if state.exitPromptOpen then
         return true
     end
 
-    local layout = Controls.getExitPromptLayout()
+    local mouseX, mouseY = love.mouse.getPosition()
 
-    if isInside(x, y, layout.yes) then
-        love.event.quit()
-    elseif isInside(x, y, layout.no)
-        or not isInside(x, y, layout.panel) then
-        Controls.closeExitPrompt()
-    end
-
-    return true
+    return FateLogic.wheelmoved(mouseX, mouseY, wheelY)
 end
 
 local function drawButton(label, bounds, color)

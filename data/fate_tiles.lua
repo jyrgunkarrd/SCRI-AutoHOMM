@@ -5,28 +5,28 @@ local fate_tiles = {
 
     {
 
-        id = "BSC0",
+        id = "NEUTRAL",
         value = 0,
 
     },
     
     {
 
-        id = "BSC1",
+        id = "PLUS 1",
         value = 1,
 
     },
 
     {
 
-        id = "BSC2",
+        id = "PLUS 2",
         value = 2,
 
     },
 
     {
 
-        id = "BSCNEG1",
+        id = "NEG 1",
         value = 1,
         neg = true,
 
@@ -34,7 +34,7 @@ local fate_tiles = {
 
     {
 
-        id = "BSCNEG2",
+        id = "NEG 2",
         value = 2,
         neg = true,
 
@@ -42,7 +42,7 @@ local fate_tiles = {
 
     {
 
-        id = "BSCFAIL",
+        id = "FAIL",
         value = 0,
         fail = true,
 
@@ -50,7 +50,7 @@ local fate_tiles = {
 
     {
 
-        id = "BSCCRIT",
+        id = "CRIT",
         value = 2,
         crit = true,
 
@@ -58,7 +58,7 @@ local fate_tiles = {
 
     {
 
-        id = "BSCFATIGUE",
+        id = "FATIGUE",
         value = 0,
         fail = true,
 

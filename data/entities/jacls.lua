@@ -9,6 +9,7 @@ local jacls = {
         name = "JACL-S3D2 VALSHAMR",
         entity_type = "JACL",
         size = 2,
+        fate = "BSCSTACK",
 
     },
 
