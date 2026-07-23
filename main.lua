@@ -69,6 +69,10 @@ if hasArg("--map-editor") then
         MapEditor.keypressed(key, scancode, isRepeat)
     end
 
+    function love.textinput(text)
+        MapEditor.textinput(text)
+    end
+
     function love.mousepressed(x, y, button, isTouch, presses)
         MapEditor.mousepressed(x, y, button, isTouch, presses)
     end
@@ -85,12 +89,43 @@ if hasArg("--map-editor") then
 end
 
 local BattleMap = require("src.sys.battle_map")
+local GameMap = require("src.sys.game_map")
+local SpawnerLogic = require("src.sys.spawner_logic")
+local Controls = require("src.input.controls")
+
+local DEFAULT_FONT_PATH = "assets/fonts/Furore.otf"
+local DEFAULT_FONT_SIZE = 18
 
 function love.load()
     love.graphics.setBackgroundColor(0.055, 0.065, 0.09)
     love.graphics.setLineStyle("smooth")
+    love.graphics.setFont(
+        love.graphics.newFont(DEFAULT_FONT_PATH, DEFAULT_FONT_SIZE)
+    )
+
+    local map, mapError = GameMap.loadDevelopmentMap()
+
+    if not map then
+        error("Failed to load development map: " .. tostring(mapError))
+    end
+
+    local entities, spawnError = SpawnerLogic.loadMap(map)
+
+    if not entities then
+        error("Failed to spawn map entities: " .. tostring(spawnError))
+    end
 end
 
 function love.draw()
-    BattleMap.draw()
+    BattleMap.draw(GameMap.getColorMap())
+    SpawnerLogic.draw()
+    Controls.draw()
+end
+
+function love.keypressed(key, scancode, isRepeat)
+    Controls.keypressed(key, scancode, isRepeat)
+end
+
+function love.mousepressed(x, y, button, isTouch, presses)
+    Controls.mousepressed(x, y, button, isTouch, presses)
 end

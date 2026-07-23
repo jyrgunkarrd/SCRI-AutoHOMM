@@ -22,6 +22,11 @@ local TEXT_COLOR = { 0.88, 0.9, 0.94, 1 }
 local MUTED_TEXT_COLOR = { 0.58, 0.62, 0.68, 1 }
 local HOVER_COLOR = { 1, 1, 1, 0.9 }
 local SELECTED_COLOR = { 1, 1, 1, 1 }
+local SPAWNER_COLOR = { 0, 62 / 255, 202 / 255, 1 }
+local SPAWNER_OUTLINE_COLOR = { 1, 1, 1, 1 }
+local SPAWNER_SIZE = 34
+local NOTIFICATION_DURATION = 4
+local NOTIFICATION_FADE_DURATION = 1
 
 local FALLBACK_PALETTE = {
     { 0.12, 0.18, 0.24, 1 },
@@ -37,19 +42,55 @@ local FALLBACK_PALETTE = {
 }
 
 local state = {
+    mapName = "untitled_map",
+    mapNameInput = nil,
     palettes = {},
     paletteIndex = 1,
     selectedColor = 1,
     tiles = {},
+    spawners = {},
+    spawnerInput = nil,
     wipFiles = {},
     wipIndex = 1,
     hoverCell = nil,
     painting = false,
     message = "",
+    messageTime = 0,
 }
+
+local function setMessage(message)
+    state.message = message
+    state.messageTime = NOTIFICATION_DURATION
+end
 
 local function joinPath(...)
     return table.concat({ ... }, "/"):gsub("//+", "/")
+end
+
+local function trim(text)
+    return text:match("^%s*(.-)%s*$")
+end
+
+local function getBaseName(path)
+    local fileName = path:match("([^/]+)$") or path
+
+    return (fileName:gsub("%.[^%.]+$", ""))
+end
+
+local function getMapFileName(mapName)
+    local safeName = mapName
+        :gsub("[%c/\\:*?\"<>|]", "_")
+        :gsub("%s+", "_")
+        :gsub("[^%w%._%-]", "_")
+        :gsub("_+", "_")
+        :gsub("^%.+", "")
+        :gsub("%.+$", "")
+
+    if safeName == "" then
+        safeName = "map"
+    end
+
+    return safeName .. ".lua"
 end
 
 local function isInside(x, y, left, top, width, height)
@@ -196,7 +237,7 @@ local function scanPalettes()
             if palette then
                 state.palettes[#state.palettes + 1] = palette
             else
-                state.message = ("Skipped %s: %s"):format(fileName, tostring(paletteError))
+                setMessage(("Skipped %s: %s"):format(fileName, tostring(paletteError)))
             end
         end
     end
@@ -212,9 +253,9 @@ local function scanPalettes()
             name = "Built-in Default",
             colors = colors,
         }
-        state.message = "No palette images found; using the built-in palette."
+        setMessage("No palette images found; using the built-in palette.")
     else
-        state.message = ("Loaded %d palette(s)."):format(#state.palettes)
+        setMessage(("Loaded %d palette(s)."):format(#state.palettes))
     end
 
     state.paletteIndex = math.min(state.paletteIndex, #state.palettes)
@@ -245,23 +286,144 @@ local function resetTiles()
     end
 end
 
+local function setTextInputEnabled(enabled)
+    if love.keyboard and love.keyboard.setTextInput then
+        love.keyboard.setTextInput(enabled)
+    end
+end
+
+local function beginSpawnerEdit()
+    local cell = state.hoverCell
+
+    if not cell then
+        setMessage("Hover a hex before pressing S.")
+        return
+    end
+
+    state.painting = false
+    state.spawnerInput = {
+        cellKey = cell.key,
+        original = state.spawners[cell.key],
+        value = state.spawners[cell.key] or "",
+        suppressInitialS = true,
+    }
+    setMessage("Enter a target string for spawner " .. cell.key)
+    setTextInputEnabled(true)
+end
+
+local function finishSpawnerEdit()
+    local input = state.spawnerInput
+
+    if not input then
+        return
+    end
+
+    if not input.value:match("%S") then
+        setMessage("Spawner target cannot be empty.")
+        return
+    end
+
+    state.spawners[input.cellKey] = input.value
+    setMessage(("Spawner %s targets %q."):format(input.cellKey, input.value))
+    state.spawnerInput = nil
+    setTextInputEnabled(false)
+end
+
+local function cancelSpawnerEdit()
+    if not state.spawnerInput then
+        return
+    end
+
+    state.spawnerInput = nil
+    setMessage("Spawner edit cancelled.")
+    setTextInputEnabled(false)
+end
+
+local function removeHoveredSpawner()
+    local cell = state.hoverCell
+
+    if not cell or not state.spawners[cell.key] then
+        setMessage("The hovered hex has no spawner.")
+        return
+    end
+
+    state.spawners[cell.key] = nil
+    setMessage("Removed spawner " .. cell.key)
+end
+
+local function removeLastUtf8Character(text)
+    local offset = #text
+
+    while offset > 0 do
+        local byte = text:byte(offset)
+
+        if byte < 128 or byte >= 192 then
+            break
+        end
+
+        offset = offset - 1
+    end
+
+    return text:sub(1, math.max(0, offset - 1))
+end
+
+local function beginMapNameEdit()
+    state.painting = false
+    state.mapNameInput = {
+        value = state.mapName == "untitled_map" and "" or state.mapName,
+        suppressInitialM = true,
+    }
+    setMessage("Enter a name for this map.")
+    setTextInputEnabled(true)
+end
+
+local function finishMapNameEdit()
+    local input = state.mapNameInput
+
+    if not input then
+        return
+    end
+
+    local name = trim(input.value)
+
+    if not name:match("%S") then
+        setMessage("Map name cannot be empty.")
+        return
+    end
+
+    state.mapName = name
+    state.mapNameInput = nil
+    setMessage("Map renamed to " .. name)
+    setTextInputEnabled(false)
+end
+
+local function cancelMapNameEdit()
+    if not state.mapNameInput then
+        return
+    end
+
+    state.mapNameInput = nil
+    setMessage("Map rename cancelled.")
+    setTextInputEnabled(false)
+end
+
 local function changePalette(offset)
     if #state.palettes == 0 then
         return
     end
 
     state.paletteIndex = (state.paletteIndex - 1 + offset) % #state.palettes + 1
-    state.message = "Palette: " .. getCurrentPalette().name
+    setMessage("Palette: " .. getCurrentPalette().name)
 end
 
 local function changeWip(offset)
     if #state.wipFiles == 0 then
-        state.message = "No WIP maps found in " .. WIP_MAP_DIR
+        setMessage("No WIP maps found in " .. WIP_MAP_DIR)
         return
     end
 
     state.wipIndex = (state.wipIndex - 1 + offset) % #state.wipFiles + 1
-    state.message = "Selected WIP: " .. state.wipFiles[state.wipIndex]
+    setMessage("Selected WIP: " .. state.wipFiles[state.wipIndex])
 end
 
 local function activateMapPalette(mapPalette)
@@ -290,7 +452,7 @@ local function loadSelectedWip()
     local fileName = state.wipFiles[state.wipIndex]
 
     if not fileName then
-        state.message = "No WIP maps found in " .. WIP_MAP_DIR
+        setMessage("No WIP maps found in " .. WIP_MAP_DIR)
         return
     end
 
@@ -298,7 +460,7 @@ local function loadSelectedWip()
     local map, mapError = MapData.load(path)
 
     if not map then
-        state.message = "Load failed: " .. tostring(mapError)
+        setMessage("Load failed: " .. tostring(mapError))
         return
     end
 
@@ -308,13 +470,21 @@ local function loadSelectedWip()
         state.tiles[cell.key] = map.tiles[cell.key] or 1
     end
 
-    state.message = "Loaded " .. fileName
+    state.spawners = {}
+
+    for key, target in pairs(map.spawners or {}) do
+        state.spawners[key] = target
+    end
+
+    state.mapName = map.name or getBaseName(fileName)
+    setMessage("Loaded " .. fileName)
 end
 
 local function buildMapData()
     local palette = getCurrentPalette()
     local colors = {}
     local tiles = {}
+    local spawners = {}
 
     for index, color in ipairs(palette.colors) do
         colors[index] = copyColor(color)
@@ -322,16 +492,22 @@ local function buildMapData()
 
     for _, cell in ipairs(BattleMap.getCells()) do
         tiles[cell.key] = state.tiles[cell.key] or 1
+
+        if state.spawners[cell.key] then
+            spawners[cell.key] = state.spawners[cell.key]
+        end
     end
 
     return {
         format = MapData.FORMAT,
         version = MapData.VERSION,
+        name = state.mapName,
         palette = {
             name = palette.name,
             colors = colors,
         },
         tiles = tiles,
+        spawners = spawners,
     }
 end
 
@@ -339,13 +515,13 @@ local function exportMap()
     local encoded, encodeError = MapData.encode(buildMapData())
 
     if not encoded then
-        state.message = "Export failed: " .. tostring(encodeError)
+        setMessage("Export failed: " .. tostring(encodeError))
         return
     end
 
     local sourceRoot = getSourceRoot():gsub("/+$", "")
     local nativeDirectory = joinPath(sourceRoot, SAVED_MAP_DIR):gsub("%z", "")
-    local fileName = os.date("map_%Y%m%d_%H%M%S.lua")
+    local fileName = getMapFileName(state.mapName)
     local nativePath = joinPath(nativeDirectory, fileName)
 
     ensureNativeDirectory(nativeDirectory)
@@ -353,13 +529,13 @@ local function exportMap()
     local file, fileError = io.open(nativePath, "wb")
 
     if not file then
-        state.message = "Export failed: " .. tostring(fileError)
+        setMessage("Export failed: " .. tostring(fileError))
         return
     end
 
     file:write(encoded)
     file:close()
-    state.message = "Exported " .. joinPath(SAVED_MAP_DIR, fileName)
+    setMessage("Exported " .. joinPath(SAVED_MAP_DIR, fileName))
 end
 
 local function getColorMap()
@@ -380,6 +556,100 @@ local function drawButton(label, x, y, width, active)
     love.graphics.printf(label, x, y + 8, width, "center")
 end
 
+local function drawSpawners()
+    for _, cell in ipairs(BattleMap.getCells()) do
+        local hasSpawner = state.spawners[cell.key] ~= nil
+            or state.spawnerInput
+                and state.spawnerInput.cellKey == cell.key
+
+        if hasSpawner then
+            local left = cell.x - SPAWNER_SIZE / 2
+            local top = cell.y - SPAWNER_SIZE / 2
+
+            love.graphics.setColor(SPAWNER_COLOR)
+            love.graphics.rectangle(
+                "fill",
+                left,
+                top,
+                SPAWNER_SIZE,
+                SPAWNER_SIZE
+            )
+            love.graphics.setColor(SPAWNER_OUTLINE_COLOR)
+            love.graphics.setLineWidth(2)
+            love.graphics.rectangle(
+                "line",
+                left,
+                top,
+                SPAWNER_SIZE,
+                SPAWNER_SIZE
+            )
+            love.graphics.printf(
+                "S",
+                left,
+                cell.y - 8,
+                SPAWNER_SIZE,
+                "center"
+            )
+        end
+    end
+end
+
+local function drawSpawnerInput()
+    local input = state.spawnerInput
+
+    if not input then
+        return
+    end
+
+    local width = 760
+    local height = 96
+    local left = (love.graphics.getWidth() - width) / 2
+    local top = 22
+
+    love.graphics.setColor(PANEL_COLOR)
+    love.graphics.rectangle("fill", left, top, width, height, 6, 6)
+    love.graphics.setColor(SPAWNER_OUTLINE_COLOR)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", left, top, width, height, 6, 6)
+    love.graphics.print("SPAWNER TARGET — Enter to save, Esc to cancel", left + 16, top + 12)
+    love.graphics.setColor(TEXT_COLOR)
+    love.graphics.printf(
+        input.value .. "_",
+        left + 16,
+        top + 48,
+        width - 32,
+        "left"
+    )
+end
+
+local function drawMapNameInput()
+    local input = state.mapNameInput
+
+    if not input then
+        return
+    end
+
+    local width = 760
+    local height = 96
+    local left = (love.graphics.getWidth() - width) / 2
+    local top = 22
+
+    love.graphics.setColor(PANEL_COLOR)
+    love.graphics.rectangle("fill", left, top, width, height, 6, 6)
+    love.graphics.setColor(SPAWNER_OUTLINE_COLOR)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", left, top, width, height, 6, 6)
+    love.graphics.print("MAP NAME — Enter to save, Esc to cancel", left + 16, top + 12)
+    love.graphics.setColor(TEXT_COLOR)
+    love.graphics.printf(
+        input.value .. "_",
+        left + 16,
+        top + 48,
+        width - 32,
+        "left"
+    )
+end
+
 local function drawPanel()
     local palette = getCurrentPalette()
 
@@ -389,7 +659,13 @@ local function drawPanel()
     love.graphics.setColor(TEXT_COLOR)
     love.graphics.print("MAP EDITOR", PANEL_X + 10, PANEL_Y + 12)
     love.graphics.setColor(MUTED_TEXT_COLOR)
-    love.graphics.printf(palette.name, PANEL_X + 10, PANEL_Y + 42, PANEL_WIDTH - 20, "left")
+    love.graphics.printf(
+        "Map: " .. state.mapName .. "\nPalette: " .. palette.name,
+        PANEL_X + 10,
+        PANEL_Y + 38,
+        PANEL_WIDTH - 20,
+        "left"
+    )
 
     drawButton("<", PANEL_X + 10, PANEL_Y + 76, 72, #state.palettes > 1)
     drawButton(">", PANEL_X + 98, PANEL_Y + 76, 72, #state.palettes > 1)
@@ -427,20 +703,48 @@ local function drawPanel()
 
     love.graphics.setColor(MUTED_TEXT_COLOR)
     love.graphics.printf(
-        "[ / ] palette\n, / . WIP map\nL load  E export\n1-0 choose color\nR reset  O rescan",
+        "[ / ] palette\n, / . WIP map\nL load  E export\n1-0 choose color\nM rename map\nS add/edit spawner\nDel remove spawner\nR reset  O rescan",
         PANEL_X + 10,
         wipY + 160,
         PANEL_WIDTH - 20,
         "left"
     )
 
-    love.graphics.setColor(TEXT_COLOR)
+    if state.hoverCell and state.spawners[state.hoverCell.key] then
+        love.graphics.setColor(SPAWNER_OUTLINE_COLOR)
+        love.graphics.printf(
+            "Target:\n" .. state.spawners[state.hoverCell.key],
+            PANEL_X + 10,
+            wipY + 380,
+            PANEL_WIDTH - 20,
+            "left"
+        )
+    end
+end
+
+local function drawNotification()
+    if state.message == "" or state.messageTime <= 0 then
+        return
+    end
+
+    local alpha = math.min(
+        1,
+        state.messageTime / NOTIFICATION_FADE_DURATION
+    )
+    local width = 900
+    local height = 58
+    local left = (love.graphics.getWidth() - width) / 2
+    local top = love.graphics.getHeight() - height - 20
+
+    love.graphics.setColor(0, 0, 0, 0.88 * alpha)
+    love.graphics.rectangle("fill", left, top, width, height, 6, 6)
+    love.graphics.setColor(1, 1, 1, alpha)
     love.graphics.printf(
         state.message,
-        PANEL_X + 10,
-        wipY + 270,
-        PANEL_WIDTH - 20,
-        "left"
+        left + 18,
+        top + 20,
+        width - 36,
+        "center"
     )
 end
 
@@ -469,7 +773,7 @@ local function handlePanelClick(x, y)
 
         if isInside(x, y, swatchX, swatchY, SWATCH_SIZE, SWATCH_SIZE) then
             state.selectedColor = index
-            state.message = ("Selected color %d."):format(index)
+            setMessage(("Selected color %d."):format(index))
             return true
         end
     end
@@ -503,9 +807,15 @@ function editor.load()
     scanPalettes()
     scanWipMaps()
     resetTiles()
+    state.mapName = "untitled_map"
+    state.mapNameInput = nil
+    state.spawners = {}
+    state.spawnerInput = nil
 end
 
-function editor.update() end
+function editor.update(dt)
+    state.messageTime = math.max(0, state.messageTime - dt)
+end
 
 function editor.draw()
     love.graphics.clear(
@@ -515,18 +825,56 @@ function editor.draw()
         BACKGROUND_COLOR[4]
     )
     BattleMap.draw(getColorMap())
+    drawSpawners()
 
     if state.hoverCell then
         BattleMap.drawHexOutline(state.hoverCell, HOVER_COLOR, 3)
     end
 
     drawPanel()
+    drawSpawnerInput()
+    drawMapNameInput()
+    drawNotification()
     love.graphics.setColor(1, 1, 1, 1)
 end
 
 function editor.keypressed(key)
+    if state.spawnerInput then
+        if key == "return" or key == "kpenter" then
+            finishSpawnerEdit()
+        elseif key == "escape" then
+            cancelSpawnerEdit()
+        elseif key == "backspace" then
+            state.spawnerInput.value = removeLastUtf8Character(
+                state.spawnerInput.value
+            )
+        end
+
+        return
+    end
+
+    if state.mapNameInput then
+        if key == "return" or key == "kpenter" then
+            finishMapNameEdit()
+        elseif key == "escape" then
+            cancelMapNameEdit()
+        elseif key == "backspace" then
+            state.mapNameInput.value = removeLastUtf8Character(
+                state.mapNameInput.value
+            )
+        end
+
+        return
+    end
+
     if key == "escape" then
         love.event.quit()
+    elseif key == "m" then
+        beginMapNameEdit()
+    elseif key == "s" then
+        beginSpawnerEdit()
+    elseif key == "delete" then
+        removeHoveredSpawner()
     elseif key == "[" then
         changePalette(-1)
     elseif key == "]" then
@@ -541,11 +889,11 @@ function editor.keypressed(key)
         exportMap()
     elseif key == "r" then
         resetTiles()
-        state.message = "Reset every hex to color 1."
+        setMessage("Reset every hex to color 1.")
     elseif key == "o" then
         scanPalettes()
         scanWipMaps()
-        state.message = "Rescanned palettes and WIP maps."
+        setMessage("Rescanned palettes and WIP maps.")
     elseif key:match("^[1-9]$") then
         state.selectedColor = tonumber(key)
     elseif key == "0" then
@@ -553,8 +901,52 @@ function editor.keypressed(key)
     end
 end
 
+function editor.textinput(text)
+    local spawnerInput = state.spawnerInput
+
+    if spawnerInput then
+        if spawnerInput.suppressInitialS then
+            spawnerInput.suppressInitialS = false
+
+            if text:lower() == "s" then
+                return
+            end
+        end
+
+        if #spawnerInput.value + #text <= MapData.MAX_SPAWNER_TARGET_LENGTH then
+            spawnerInput.value = spawnerInput.value .. text
+        else
+            setMessage((
+                "Spawner targets are limited to %d bytes."
+            ):format(MapData.MAX_SPAWNER_TARGET_LENGTH))
+        end
+
+        return
+    end
+
+    local mapNameInput = state.mapNameInput
+
+    if mapNameInput then
+        if mapNameInput.suppressInitialM then
+            mapNameInput.suppressInitialM = false
+
+            if text:lower() == "m" then
+                return
+            end
+        end
+
+        if #mapNameInput.value + #text <= MapData.MAX_MAP_NAME_LENGTH then
+            mapNameInput.value = mapNameInput.value .. text
+        else
+            setMessage((
+                "Map names are limited to %d bytes."
+            ):format(MapData.MAX_MAP_NAME_LENGTH))
+        end
+    end
+end
+
 function editor.mousepressed(x, y, button)
-    if button ~= 1 then
+    if button ~= 1 or state.spawnerInput or state.mapNameInput then
         return
     end
 

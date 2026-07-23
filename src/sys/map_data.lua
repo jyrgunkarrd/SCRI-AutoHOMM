@@ -5,6 +5,8 @@ local MapData = {}
 MapData.FORMAT = "scri-autohomm-map"
 MapData.VERSION = 1
 MapData.PALETTE_SIZE = 10
+MapData.MAX_MAP_NAME_LENGTH = 64
+MapData.MAX_SPAWNER_TARGET_LENGTH = 128
 
 local validCellKeys = {}
 
@@ -41,6 +43,16 @@ function MapData.validate(map)
         return nil, "unsupported map version"
     end
 
+    if map.name ~= nil then
+        if type(map.name) ~= "string" or not map.name:match("%S") then
+            return nil, "map name must be a non-empty string"
+        end
+
+        if #map.name > MapData.MAX_MAP_NAME_LENGTH then
+            return nil, "map name is too long"
+        end
+    end
+
     if type(map.palette) ~= "table"
         or type(map.palette.name) ~= "string"
         or type(map.palette.colors) ~= "table" then
@@ -71,6 +83,24 @@ function MapData.validate(map)
             or paletteIndex < 1
             or paletteIndex > MapData.PALETTE_SIZE then
             return nil, "invalid palette index for hex " .. key
+        end
+    end
+
+    if map.spawners ~= nil and type(map.spawners) ~= "table" then
+        return nil, "map spawners must be a table"
+    end
+
+    for key, target in pairs(map.spawners or {}) do
+        if not validCellKeys[key] then
+            return nil, "map contains a spawner on an unknown hex: " .. tostring(key)
+        end
+
+        if type(target) ~= "string" or not target:match("%S") then
+            return nil, "spawner target for hex " .. key .. " must be a non-empty string"
+        end
+
+        if #target > MapData.MAX_SPAWNER_TARGET_LENGTH then
+            return nil, "spawner target for hex " .. key .. " is too long"
         end
     end
 
@@ -116,6 +146,18 @@ function MapData.toColorMap(map)
     return colors
 end
 
+function MapData.getSpawnerTarget(map, cellOrKey)
+    local valid, validationError = MapData.validate(map)
+
+    if not valid then
+        return nil, validationError
+    end
+
+    local key = type(cellOrKey) == "table" and cellOrKey.key or cellOrKey
+
+    return (map.spawners or {})[key]
+end
+
 function MapData.encode(map)
     local valid, validationError = MapData.validate(map)
 
@@ -127,8 +169,15 @@ function MapData.encode(map)
         "return {",
         ("    format = %q,"):format(MapData.FORMAT),
         ("    version = %d,"):format(MapData.VERSION),
-        ("    palette = { name = %q, colors = {"):format(map.palette.name),
     }
+
+    if map.name then
+        lines[#lines + 1] = ("    name = %q,"):format(map.name)
+    end
+
+    lines[#lines + 1] = (
+        "    palette = { name = %q, colors = {"
+    ):format(map.palette.name)
 
     for _, color in ipairs(map.palette.colors) do
         lines[#lines + 1] = (
@@ -143,6 +192,19 @@ function MapData.encode(map)
         lines[#lines + 1] = (
             "        [%q] = %d,"
         ):format(cell.key, map.tiles[cell.key] or 1)
+    end
+
+    lines[#lines + 1] = "    },"
+    lines[#lines + 1] = "    spawners = {"
+
+    for _, cell in ipairs(BattleMap.getCells()) do
+        local target = (map.spawners or {})[cell.key]
+
+        if target then
+            lines[#lines + 1] = (
+                "        [%q] = %q,"
+            ):format(cell.key, target)
+        end
     end
 
     lines[#lines + 1] = "    },"

@@ -38,11 +38,12 @@ local function hexVertices(centerX, centerY, radius)
 end
 
 local cells = {}
+local cellsByKey = {}
 
 local function addCell(column, row, section)
     local centerX, centerY = getHexCenter(column, row)
 
-    cells[#cells + 1] = {
+    local cell = {
         key = ("%d:%d"):format(row, column),
         column = column,
         row = row,
@@ -50,6 +51,9 @@ local function addCell(column, row, section)
         x = centerX,
         y = centerY,
     }
+
+    cells[#cells + 1] = cell
+    cellsByKey[cell.key] = cell
 end
 
 local upperClusters = {
@@ -88,6 +92,43 @@ end
 
 function BattleMap.getCells()
     return cells
+end
+
+function BattleMap.getCell(column, row)
+    return cellsByKey[("%d:%d"):format(row, column)]
+end
+
+function BattleMap.getCellByKey(key)
+    return cellsByKey[key]
+end
+
+function BattleMap.getNeighbors(cell)
+    local diagonalColumn = cell.row % 2 == 0
+        and cell.column - 1
+        or cell.column + 1
+    local coordinates = {
+        { cell.column - 1, cell.row },
+        { cell.column + 1, cell.row },
+        { cell.column, cell.row - 1 },
+        { diagonalColumn, cell.row - 1 },
+        { cell.column, cell.row + 1 },
+        { diagonalColumn, cell.row + 1 },
+    }
+    local neighbors = {}
+
+    for _, coordinate in ipairs(coordinates) do
+        local neighbor = BattleMap.getCell(coordinate[1], coordinate[2])
+
+        if neighbor then
+            neighbors[#neighbors + 1] = neighbor
+        end
+    end
+
+    return neighbors
+end
+
+function BattleMap.getHexVertices(cell)
+    return hexVertices(cell.x, cell.y, HEX_RADIUS)
 end
 
 function BattleMap.getDefaultColor()
