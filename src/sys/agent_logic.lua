@@ -804,15 +804,26 @@ function AgentLogic.draw(entity)
     local pulseScale = getPulseScale(entity)
         * (entity.initiativeEffectScale or 1)
     local scale = diameter / math.max(imageWidth, imageHeight) * pulseScale
+    local centerX = entity.movementVisualX or entity.anchor.x
+    local centerY = entity.movementVisualY or entity.anchor.y
+    local offsetX = centerX - entity.anchor.x
+    local offsetY = centerY - entity.anchor.y
 
     love.graphics.stencil(function()
         for _, cell in ipairs(entity.footprint) do
+            local points = BattleMap.getHexVertices(cell)
+
+            for index = 1, #points, 2 do
+                points[index] = points[index] + offsetX
+                points[index + 1] = points[index + 1] + offsetY
+            end
+
             love.graphics.polygon(
                 "fill",
                 scalePointsFromCenter(
-                    BattleMap.getHexVertices(cell),
-                    entity.anchor.x,
-                    entity.anchor.y,
+                    points,
+                    centerX,
+                    centerY,
                     pulseScale
                 )
             )
@@ -833,8 +844,8 @@ function AgentLogic.draw(entity)
     )
     love.graphics.draw(
         entity.portrait,
-        entity.anchor.x,
-        entity.anchor.y,
+        centerX,
+        centerY,
         0,
         scale,
         scale,
@@ -851,7 +862,7 @@ function AgentLogic.draw(entity)
     love.graphics.setLineWidth(PORTRAIT_OUTLINE_WIDTH)
     love.graphics.polygon(
         "line",
-        buildHexPoints(entity.anchor.x, entity.anchor.y, outlineRadius)
+        buildHexPoints(centerX, centerY, outlineRadius)
     )
 end
 

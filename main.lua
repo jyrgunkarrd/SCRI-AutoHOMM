@@ -100,6 +100,7 @@ local AgencyLogic = require("src.sys.agency_logic")
 local TurnLogic = require("src.sys.turn_logic")
 local PreparationLogic = require("src.sys.preparation_logic")
 local ReflexLogic = require("src.sys.reflex_logic")
+local MovementSpdLogic = require("src.sys.movement_spd_logic")
 local Controls = require("src.input.controls")
 
 local DEFAULT_FONT_PATH = "assets/fonts/Furore.otf"
@@ -138,15 +139,25 @@ function love.load()
     end
 
     ReflexLogic.reset()
+    MovementSpdLogic.reset()
     TurnLogic.setResolutionHandler(function(phase, round)
         if phase == "Reflex" then
             return ReflexLogic.resolveRound(entities, round)
+        elseif phase == "March" then
+            MovementSpdLogic.beginMarch(entities, round)
+            return true
         end
 
         return true
     end)
     TurnLogic.setResolutionReadyCheck(function(phase)
-        return phase ~= "Reflex" or not ReflexLogic.isAnimating()
+        if phase == "Reflex" then
+            return not ReflexLogic.isAnimating()
+        elseif phase == "March" then
+            return not MovementSpdLogic.isProcessing()
+        end
+
+        return true
     end)
 
     if not PreparationLogic.loadMap(map) then
@@ -159,7 +170,11 @@ function love.draw()
     PreparationLogic.drawMapOverlay()
 
     if not PreparationLogic.isActive() then
-        SpawnerLogic.drawMovementOverlay()
+        if MovementSpdLogic.isProcessing() then
+            MovementSpdLogic.draw()
+        else
+            SpawnerLogic.drawMovementOverlay()
+        end
     end
 
     SpawnerLogic.drawEntities()
@@ -186,6 +201,7 @@ end
 function love.update(dt)
     SpawnerLogic.update(dt)
     ReflexLogic.update(dt)
+    MovementSpdLogic.update(dt, SpawnerLogic.getEntities())
 
     if not PreparationLogic.isActive() then
         TurnLogic.update(dt)

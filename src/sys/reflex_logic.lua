@@ -35,6 +35,7 @@ local initiativeSequence = {}
 local agentQueue = {}
 local hostileQueue = {}
 local resolvedRound
+local phaseActiveEntry
 local animationQueue = {}
 local activeAnimation
 local animatedEntities = {}
@@ -364,14 +365,21 @@ end
 local function refreshSideQueues()
     agentQueue = {}
     hostileQueue = {}
+    local includeEntry = phaseActiveEntry == nil
 
     for _, entry in ipairs(initiativeSequence) do
-        local target = entry.entityType == "HOSTILE"
-            and hostileQueue
-            or agentQueue
+        if entry == phaseActiveEntry then
+            includeEntry = true
+        end
 
-        if #target < VISIBLE_ENTRIES_PER_SIDE then
-            target[#target + 1] = entry
+        if includeEntry then
+            local target = entry.entityType == "HOSTILE"
+                and hostileQueue
+                or agentQueue
+
+            if #target < VISIBLE_ENTRIES_PER_SIDE then
+                target[#target + 1] = entry
+            end
         end
     end
 end
@@ -488,6 +496,7 @@ function ReflexLogic.reset()
     agentQueue = {}
     hostileQueue = {}
     resolvedRound = nil
+    phaseActiveEntry = nil
 end
 
 function ReflexLogic.resolveRound(entities, round, random)
@@ -531,6 +540,7 @@ function ReflexLogic.resolveRound(entities, round, random)
 
     initiativeSequence = nextSequence
     resolvedRound = round
+    phaseActiveEntry = nil
     animationQueue = exceptionalEvents
     refreshSideQueues()
 
@@ -551,6 +561,28 @@ end
 
 function ReflexLogic.getResolvedRound()
     return resolvedRound
+end
+
+function ReflexLogic.setPhaseActiveEntry(entry)
+    if entry ~= nil then
+        local found = false
+
+        for _, initiativeEntry in ipairs(initiativeSequence) do
+            if initiativeEntry == entry then
+                found = true
+                break
+            end
+        end
+
+        if not found then
+            return nil, "active entry must belong to the initiative sequence"
+        end
+    end
+
+    phaseActiveEntry = entry
+    refreshSideQueues()
+
+    return true
 end
 
 function ReflexLogic.isAnimating()
@@ -699,7 +731,7 @@ function ReflexLogic.draw(round, jaclButtonBounds, hostileButtonBounds)
     end
 
     local centerY = jaclButtonBounds.y + jaclButtonBounds.height / 2
-    local activeEntry = initiativeSequence[1]
+    local activeEntry = phaseActiveEntry or initiativeSequence[1]
 
     for index, entry in ipairs(agentQueue) do
         local centerX = jaclButtonBounds.x

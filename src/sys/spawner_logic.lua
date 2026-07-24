@@ -124,26 +124,31 @@ function SpawnerLogic.getEntityAt(cellOrKey)
     return occupiedCells[key]
 end
 
-function SpawnerLogic.moveAgent(entity, anchorCell, cellAllowed)
-    if not entity or entity.entityType ~= "AGENT" then
-        return nil, "only Agent entities can be moved during Preparation"
-    end
-
-    if not anchorCell then
-        return nil, "Agent destination must be a valid hex"
-    end
-
-    local isSpawned = false
-
+local function isSpawnedEntity(entity)
     for _, spawnedEntity in ipairs(spawnedEntities) do
         if spawnedEntity == entity then
-            isSpawned = true
-            break
+            return true
         end
     end
 
-    if not isSpawned then
-        return nil, "Agent is not part of the loaded map"
+    return false
+end
+
+function SpawnerLogic.canEntityOccupy(entity, anchorCell, cellAllowed)
+    if not entity
+        or (
+            entity.entityType ~= "AGENT"
+            and entity.entityType ~= "HOSTILE"
+        ) then
+        return nil, "only Agent or Hostile entities can occupy movement hexes"
+    end
+
+    if not anchorCell then
+        return nil, "entity destination must be a valid hex"
+    end
+
+    if not isSpawnedEntity(entity) then
+        return nil, "entity is not part of the loaded map"
     end
 
     local footprint, footprintError = entity.logic.getFootprint(
@@ -157,7 +162,7 @@ function SpawnerLogic.moveAgent(entity, anchorCell, cellAllowed)
 
     for _, cell in ipairs(footprint) do
         if cellAllowed and not cellAllowed(cell) then
-            return nil, "Agent footprint must remain on Preparation hexes"
+            return nil, "entity footprint contains a disallowed hex"
         end
 
         local occupant = occupiedCells[cell.key]
@@ -167,6 +172,20 @@ function SpawnerLogic.moveAgent(entity, anchorCell, cellAllowed)
                 "destination hex %s is occupied by %q"
             ):format(cell.key, occupant.id)
         end
+    end
+
+    return footprint
+end
+
+function SpawnerLogic.moveEntity(entity, anchorCell, cellAllowed)
+    local footprint, footprintError = SpawnerLogic.canEntityOccupy(
+        entity,
+        anchorCell,
+        cellAllowed
+    )
+
+    if not footprint then
+        return nil, footprintError
     end
 
     for _, cell in ipairs(entity.footprint) do
@@ -183,6 +202,24 @@ function SpawnerLogic.moveAgent(entity, anchorCell, cellAllowed)
     end
 
     return true
+end
+
+function SpawnerLogic.moveAgent(entity, anchorCell, cellAllowed)
+    if not entity or entity.entityType ~= "AGENT" then
+        return nil, "only Agent entities can be moved during Preparation"
+    end
+
+    local moved, moveError = SpawnerLogic.moveEntity(
+        entity,
+        anchorCell,
+        cellAllowed
+    )
+
+    if not moved and moveError == "entity footprint contains a disallowed hex" then
+        return nil, "Agent footprint must remain on Preparation hexes"
+    end
+
+    return moved, moveError
 end
 
 function SpawnerLogic.drawEntities()
