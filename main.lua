@@ -85,6 +85,10 @@ if hasArg("--map-editor") then
         MapEditor.mousemoved(x, y, dx, dy, isTouch)
     end
 
+    function love.quit()
+        return MapEditor.quit()
+    end
+
     return
 end
 
@@ -92,6 +96,9 @@ local BattleMap = require("src.sys.battle_map")
 local GameMap = require("src.sys.game_map")
 local SpawnerLogic = require("src.sys.spawner_logic")
 local FateLogic = require("src.sys.fate_logic")
+local AgencyLogic = require("src.sys.agency_logic")
+local TurnLogic = require("src.sys.turn_logic")
+local PreparationLogic = require("src.sys.preparation_logic")
 local Controls = require("src.input.controls")
 
 local DEFAULT_FONT_PATH = "assets/fonts/Furore.otf"
@@ -103,6 +110,7 @@ function love.load()
     love.graphics.setFont(
         love.graphics.newFont(DEFAULT_FONT_PATH, DEFAULT_FONT_SIZE)
     )
+    TurnLogic.reset()
 
     local map, mapError = GameMap.loadDevelopmentMap()
 
@@ -121,13 +129,47 @@ function love.load()
     if not fateStacks then
         error("Failed to load fate stacks: " .. tostring(fateError))
     end
+
+    local agencyStacks, agencyError = AgencyLogic.loadEntities(entities)
+
+    if not agencyStacks then
+        error("Failed to load Agency stacks: " .. tostring(agencyError))
+    end
+
+    if not PreparationLogic.loadMap(map) then
+        TurnLogic.begin()
+    end
 end
 
 function love.draw()
     BattleMap.draw(GameMap.getColorMap())
-    SpawnerLogic.draw()
+    PreparationLogic.drawMapOverlay()
+
+    if not PreparationLogic.isActive() then
+        SpawnerLogic.drawMovementOverlay()
+    end
+
+    SpawnerLogic.drawEntities()
+    BattleMap.drawHover()
+    SpawnerLogic.drawInterface()
+
+    if PreparationLogic.isActive() then
+        PreparationLogic.draw(FateLogic.getButtonGroupBounds())
+    else
+        TurnLogic.draw(FateLogic.getButtonGroupBounds())
+    end
+
     FateLogic.draw()
+    AgencyLogic.draw()
     Controls.draw()
+end
+
+function love.update(dt)
+    SpawnerLogic.update(dt)
+
+    if not PreparationLogic.isActive() then
+        TurnLogic.update(dt)
+    end
 end
 
 function love.keypressed(key, scancode, isRepeat)
@@ -136,6 +178,14 @@ end
 
 function love.mousepressed(x, y, button, isTouch, presses)
     Controls.mousepressed(x, y, button, isTouch, presses)
+end
+
+function love.mousereleased(x, y, button, isTouch, presses)
+    Controls.mousereleased(x, y, button, isTouch, presses)
+end
+
+function love.mousemoved(x, y, dx, dy, isTouch)
+    Controls.mousemoved(x, y, dx, dy, isTouch)
 end
 
 function love.wheelmoved(x, y)

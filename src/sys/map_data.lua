@@ -104,6 +104,26 @@ function MapData.validate(map)
         end
     end
 
+    if map.preparation_tiles ~= nil
+        and type(map.preparation_tiles) ~= "table" then
+        return nil, "map preparation_tiles must be a table"
+    end
+
+    for key, flagged in pairs(map.preparation_tiles or {}) do
+        if not validCellKeys[key] then
+            return nil, (
+                "map contains a preparation flag on an unknown hex: "
+                    .. tostring(key)
+            )
+        end
+
+        if flagged ~= true then
+            return nil, (
+                "preparation flag for hex %s must be true"
+            ):format(key)
+        end
+    end
+
     return true
 end
 
@@ -158,6 +178,18 @@ function MapData.getSpawnerTarget(map, cellOrKey)
     return (map.spawners or {})[key]
 end
 
+function MapData.isPreparationTile(map, cellOrKey)
+    local valid, validationError = MapData.validate(map)
+
+    if not valid then
+        return nil, validationError
+    end
+
+    local key = type(cellOrKey) == "table" and cellOrKey.key or cellOrKey
+
+    return (map.preparation_tiles or {})[key] == true
+end
+
 function MapData.encode(map)
     local valid, validationError = MapData.validate(map)
 
@@ -204,6 +236,17 @@ function MapData.encode(map)
             lines[#lines + 1] = (
                 "        [%q] = %q,"
             ):format(cell.key, target)
+        end
+    end
+
+    lines[#lines + 1] = "    },"
+    lines[#lines + 1] = "    preparation_tiles = {"
+
+    for _, cell in ipairs(BattleMap.getCells()) do
+        if (map.preparation_tiles or {})[cell.key] then
+            lines[#lines + 1] = (
+                "        [%q] = true,"
+            ):format(cell.key)
         end
     end
 

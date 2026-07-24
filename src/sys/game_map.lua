@@ -96,4 +96,12 @@ function GameMap.getSpawnerTarget(cellOrKey)
     return MapData.getSpawnerTarget(activeMap, cellOrKey)
 end
 
+function GameMap.isPreparationTile(cellOrKey)
+    if not activeMap then
+        return nil, "no map is loaded"
+    end
+
+    return MapData.isPreparationTile(activeMap, cellOrKey)
+end
+
 return GameMap

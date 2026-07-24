@@ -27,6 +27,11 @@ local SPAWNER_OUTLINE_COLOR = { 1, 1, 1, 1 }
 local SPAWNER_SIZE = 34
 local NOTIFICATION_DURATION = 4
 local NOTIFICATION_FADE_DURATION = 1
+local EXIT_PANEL_WIDTH = 640
+local EXIT_PANEL_HEIGHT = 240
+local EXIT_BUTTON_WIDTH = 250
+local EXIT_BUTTON_HEIGHT = 54
+local EXIT_BUTTON_GAP = 24
 
 local FALLBACK_PALETTE = {
     { 0.12, 0.18, 0.24, 1 },
@@ -49,11 +54,15 @@ local state = {
     selectedColor = 1,
     tiles = {},
     spawners = {},
+    preparationTiles = {},
     spawnerInput = nil,
     wipFiles = {},
     wipIndex = 1,
     hoverCell = nil,
     painting = false,
+    dirty = false,
+    allowQuit = false,
+    exitPromptOpen = false,
     message = "",
     messageTime = 0,
 }
@@ -61,6 +70,10 @@ local state = {
 local function setMessage(message)
     state.message = message
     state.messageTime = NOTIFICATION_DURATION
+end
+
+local function markDirty()
+    state.dirty = true
 end
 
 local function joinPath(...)
@@ -91,6 +104,56 @@ local function getMapFileName(mapName)
     end
 
     return safeName .. ".lua"
+end
+
+local function getExitPromptLayout()
+    local panel = {
+        x = (love.graphics.getWidth() - EXIT_PANEL_WIDTH) / 2,
+        y = (love.graphics.getHeight() - EXIT_PANEL_HEIGHT) / 2,
+        width = EXIT_PANEL_WIDTH,
+        height = EXIT_PANEL_HEIGHT,
+    }
+    local buttonsWidth = EXIT_BUTTON_WIDTH * 2 + EXIT_BUTTON_GAP
+    local buttonX = panel.x + (panel.width - buttonsWidth) / 2
+    local buttonY = panel.y + panel.height - EXIT_BUTTON_HEIGHT - 28
+
+    return {
+        panel = panel,
+        exit = {
+            x = buttonX,
+            y = buttonY,
+            width = EXIT_BUTTON_WIDTH,
+            height = EXIT_BUTTON_HEIGHT,
+        },
+        cancel = {
+            x = buttonX + EXIT_BUTTON_WIDTH + EXIT_BUTTON_GAP,
+            y = buttonY,
+            width = EXIT_BUTTON_WIDTH,
+            height = EXIT_BUTTON_HEIGHT,
+        },
+    }
+end
+
+local function requestExit()
+    state.painting = false
+
+    if state.dirty then
+        state.exitPromptOpen = true
+        return
+    end
+
+    state.allowQuit = true
+    love.event.quit()
+end
+
+local function confirmExitWithoutSaving()
+    state.allowQuit = true
+    state.exitPromptOpen = false
+    love.event.quit()
+end
+
+local function cancelExitPrompt()
+    state.exitPromptOpen = false
 end
 
 local function isInside(x, y, left, top, width, height)
@@ -279,11 +342,22 @@ local function scanWipMaps()
 end
 
 local function resetTiles()
+    local changed = false
+
+    for _, cell in ipairs(BattleMap.getCells()) do
+        if state.tiles[cell.key] ~= 1 then
+            changed = true
+            break
+        end
+    end
+
     state.tiles = {}
 
     for _, cell in ipairs(BattleMap.getCells()) do
         state.tiles[cell.key] = 1
     end
+
+    return changed
 end
 
 local function setTextInputEnabled(enabled)
@@ -323,7 +397,10 @@ local function finishSpawnerEdit()
         return
     end
 
-    state.spawners[input.cellKey] = input.value
+    if input.original ~= input.value then
+        state.spawners[input.cellKey] = input.value
+        markDirty()
+    end
     setMessage(("Spawner %s targets %q."):format(input.cellKey, input.value))
     state.spawnerInput = nil
     setTextInputEnabled(false)
@@ -348,7 +425,29 @@ local function removeHoveredSpawner()
     end
 
     state.spawners[cell.key] = nil
+    markDirty()
     setMessage("Removed spawner " .. cell.key)
+end
+
+local function toggleHoveredPreparationTile()
+    local cell = state.hoverCell
+
+    if not cell then
+        setMessage("Hover a hex before pressing P.")
+        return
+    end
+
+    state.painting = false
+
+    if state.preparationTiles[cell.key] then
+        state.preparationTiles[cell.key] = nil
+        setMessage("Removed Preparation flag from " .. cell.key)
+    else
+        state.preparationTiles[cell.key] = true
+        setMessage("Flagged " .. cell.key .. " as a Preparation tile.")
+    end
+
+    markDirty()
 end
 
 local function removeLastUtf8Character(text)
@@ -391,7 +490,10 @@ local function finishMapNameEdit()
         return
     end
 
-    state.mapName = name
+    if state.mapName ~= name then
+        state.mapName = name
+        markDirty()
+    end
     state.mapNameInput = nil
     setMessage("Map renamed to " .. name)
     setTextInputEnabled(false)
@@ -412,7 +514,12 @@ local function changePalette(offset)
         return
     end
 
+    local previousIndex = state.paletteIndex
     state.paletteIndex = (state.paletteIndex - 1 + offset) % #state.palettes + 1
+
+    if state.paletteIndex ~= previousIndex then
+        markDirty()
+    end
     setMessage("Palette: " .. getCurrentPalette().name)
 end
 
@@ -476,7 +583,16 @@ local function loadSelectedWip()
         state.spawners[key] = target
     end
 
+    state.preparationTiles = {}
+
+    for key, flagged in pairs(map.preparation_tiles or {}) do
+        if flagged then
+            state.preparationTiles[key] = true
+        end
+    end
+
     state.mapName = map.name or getBaseName(fileName)
+    state.dirty = false
     setMessage("Loaded " .. fileName)
 end
 
@@ -485,6 +601,7 @@ local function buildMapData()
     local colors = {}
     local tiles = {}
     local spawners = {}
+    local preparationTiles = {}
 
     for index, color in ipairs(palette.colors) do
         colors[index] = copyColor(color)
@@ -495,6 +612,10 @@ local function buildMapData()
 
         if state.spawners[cell.key] then
             spawners[cell.key] = state.spawners[cell.key]
+        end
+
+        if state.preparationTiles[cell.key] then
+            preparationTiles[cell.key] = true
         end
     end
 
@@ -508,6 +629,7 @@ local function buildMapData()
         },
         tiles = tiles,
         spawners = spawners,
+        preparation_tiles = preparationTiles,
     }
 end
 
@@ -535,6 +657,7 @@ local function exportMap()
 
     file:write(encoded)
     file:close()
+    state.dirty = false
     setMessage("Exported " .. joinPath(SAVED_MAP_DIR, fileName))
 end
 
@@ -592,6 +715,29 @@ local function drawSpawners()
             )
         end
     end
+end
+
+local function drawPreparationTiles()
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.setLineWidth(3)
+
+    for _, cell in ipairs(BattleMap.getCells()) do
+        if state.preparationTiles[cell.key] then
+            local vertices = BattleMap.getHexVertices(cell)
+            local insetVertices = {}
+
+            for index = 1, #vertices, 2 do
+                insetVertices[index] = cell.x
+                    + (vertices[index] - cell.x) * 0.62
+                insetVertices[index + 1] = cell.y
+                    + (vertices[index + 1] - cell.y) * 0.62
+            end
+
+            love.graphics.polygon("line", insetVertices)
+        end
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
 end
 
 local function drawSpawnerInput()
@@ -660,7 +806,9 @@ local function drawPanel()
     love.graphics.print("MAP EDITOR", PANEL_X + 10, PANEL_Y + 12)
     love.graphics.setColor(MUTED_TEXT_COLOR)
     love.graphics.printf(
-        "Map: " .. state.mapName .. "\nPalette: " .. palette.name,
+        "Map: " .. state.mapName
+            .. (state.dirty and " *" or "")
+            .. "\nPalette: " .. palette.name,
         PANEL_X + 10,
         PANEL_Y + 38,
         PANEL_WIDTH - 20,
@@ -703,7 +851,7 @@ local function drawPanel()
 
     love.graphics.setColor(MUTED_TEXT_COLOR)
     love.graphics.printf(
-        "[ / ] palette\n, / . WIP map\nL load  E export\n1-0 choose color\nM rename map\nS add/edit spawner\nDel remove spawner\nR reset  O rescan",
+        "[ / ] palette\n, / . WIP map\nL load  E export\n1-0 choose color\nM rename map\nS add/edit spawner\nP toggle Preparation\nDel remove spawner\nR reset  O rescan",
         PANEL_X + 10,
         wipY + 160,
         PANEL_WIDTH - 20,
@@ -748,11 +896,108 @@ local function drawNotification()
     )
 end
 
+local function drawExitPromptButton(label, bounds, color)
+    love.graphics.setColor(color)
+    love.graphics.rectangle(
+        "fill",
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height,
+        5,
+        5
+    )
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle(
+        "line",
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height,
+        5,
+        5
+    )
+    love.graphics.printf(
+        label,
+        bounds.x,
+        bounds.y + 18,
+        bounds.width,
+        "center"
+    )
+end
+
+local function drawUnsavedExitPrompt()
+    if not state.exitPromptOpen then
+        return
+    end
+
+    local layout = getExitPromptLayout()
+    local panel = layout.panel
+
+    love.graphics.setColor(0, 0, 0, 0.72)
+    love.graphics.rectangle(
+        "fill",
+        0,
+        0,
+        love.graphics.getWidth(),
+        love.graphics.getHeight()
+    )
+    love.graphics.setColor(0.025, 0.03, 0.04, 0.99)
+    love.graphics.rectangle(
+        "fill",
+        panel.x,
+        panel.y,
+        panel.width,
+        panel.height,
+        8,
+        8
+    )
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setLineWidth(3)
+    love.graphics.rectangle(
+        "line",
+        panel.x,
+        panel.y,
+        panel.width,
+        panel.height,
+        8,
+        8
+    )
+    love.graphics.printf(
+        "UNSAVED CHANGES",
+        panel.x,
+        panel.y + 34,
+        panel.width,
+        "center"
+    )
+    love.graphics.printf(
+        "This map has changes that have not been exported.\nExit without saving them?",
+        panel.x + 30,
+        panel.y + 78,
+        panel.width - 60,
+        "center"
+    )
+
+    drawExitPromptButton(
+        "EXIT WITHOUT SAVING",
+        layout.exit,
+        { 0.62, 0.12, 0.12, 1 }
+    )
+    drawExitPromptButton(
+        "CANCEL",
+        layout.cancel,
+        { 0.16, 0.2, 0.28, 1 }
+    )
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 local function paintAt(x, y)
     local cell = BattleMap.getHexAt(x, y)
 
-    if cell then
+    if cell and state.tiles[cell.key] ~= state.selectedColor then
         state.tiles[cell.key] = state.selectedColor
+        markDirty()
     end
 end
 
@@ -810,7 +1055,11 @@ function editor.load()
     state.mapName = "untitled_map"
     state.mapNameInput = nil
     state.spawners = {}
+    state.preparationTiles = {}
     state.spawnerInput = nil
+    state.dirty = false
+    state.allowQuit = false
+    state.exitPromptOpen = false
 end
 
 function editor.update(dt)
@@ -825,6 +1074,7 @@ function editor.draw()
         BACKGROUND_COLOR[4]
     )
     BattleMap.draw(getColorMap())
+    drawPreparationTiles()
     drawSpawners()
 
     if state.hoverCell then
@@ -835,6 +1085,7 @@ function editor.draw()
     drawSpawnerInput()
     drawMapNameInput()
     drawNotification()
+    drawUnsavedExitPrompt()
     love.graphics.setColor(1, 1, 1, 1)
 end
 
@@ -867,12 +1118,22 @@ function editor.keypressed(key)
         return
     end
 
+    if state.exitPromptOpen then
+        if key == "escape" then
+            cancelExitPrompt()
+        end
+
+        return
+    end
+
     if key == "escape" then
-        love.event.quit()
+        requestExit()
     elseif key == "m" then
         beginMapNameEdit()
     elseif key == "s" then
         beginSpawnerEdit()
+    elseif key == "p" then
+        toggleHoveredPreparationTile()
     elseif key == "delete" then
         removeHoveredSpawner()
     elseif key == "[" then
@@ -888,8 +1149,12 @@ function editor.keypressed(key)
     elseif key == "e" then
         exportMap()
     elseif key == "r" then
-        resetTiles()
-        setMessage("Reset every hex to color 1.")
+        if resetTiles() then
+            markDirty()
+            setMessage("Reset every hex to color 1.")
+        else
+            setMessage("Every hex already uses color 1.")
+        end
     elseif key == "o" then
         scanPalettes()
         scanWipMaps()
@@ -946,6 +1211,43 @@ function editor.textinput(text)
 end
 
 function editor.mousepressed(x, y, button)
+    if state.exitPromptOpen then
+        if button == 2 then
+            cancelExitPrompt()
+        elseif button == 1 then
+            local layout = getExitPromptLayout()
+
+            if isInside(
+                x,
+                y,
+                layout.exit.x,
+                layout.exit.y,
+                layout.exit.width,
+                layout.exit.height
+            ) then
+                confirmExitWithoutSaving()
+            elseif isInside(
+                x,
+                y,
+                layout.cancel.x,
+                layout.cancel.y,
+                layout.cancel.width,
+                layout.cancel.height
+            ) or not isInside(
+                x,
+                y,
+                layout.panel.x,
+                layout.panel.y,
+                layout.panel.width,
+                layout.panel.height
+            ) then
+                cancelExitPrompt()
+            end
+        end
+
+        return
+    end
+
     if button ~= 1 or state.spawnerInput or state.mapNameInput then
         return
     end
@@ -970,6 +1272,25 @@ function editor.mousemoved(x, y)
     if state.painting then
         paintAt(x, y)
     end
+end
+
+function editor.quit()
+    if state.allowQuit or not state.dirty then
+        return false
+    end
+
+    state.painting = false
+    state.exitPromptOpen = true
+
+    return true
+end
+
+function editor.hasUnsavedChanges()
+    return state.dirty
+end
+
+function editor.isExitPromptOpen()
+    return state.exitPromptOpen
 end
 
 return editor

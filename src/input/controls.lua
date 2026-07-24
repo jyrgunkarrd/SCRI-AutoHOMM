@@ -1,4 +1,9 @@
 local FateLogic = require("src.sys.fate_logic")
+local AgencyLogic = require("src.sys.agency_logic")
+local TurnLogic = require("src.sys.turn_logic")
+local PreparationLogic = require("src.sys.preparation_logic")
+local SpawnerLogic = require("src.sys.spawner_logic")
+local BattleMap = require("src.sys.battle_map")
 
 local Controls = {}
 
@@ -60,6 +65,7 @@ end
 function Controls.keypressed(key)
     if key == "escape" then
         state.exitPromptOpen = not state.exitPromptOpen
+        BattleMap.clearHoveredCell()
         return true
     end
 
@@ -67,10 +73,31 @@ function Controls.keypressed(key)
         return true
     end
 
-    return FateLogic.keypressed(key)
+    if AgencyLogic.isModalOpen() then
+        return true
+    end
+
+    local consumed = FateLogic.keypressed(key)
+
+    if FateLogic.isModalOpen() then
+        BattleMap.clearHoveredCell()
+    end
+
+    if consumed then
+        return true
+    end
+
+    if PreparationLogic.isActive() then
+        return true
+    end
+
+    return TurnLogic.keypressed(key)
 end
 
 function Controls.mousepressed(x, y, button)
+    local agentDeselected = button == 2
+        and SpawnerLogic.mousepressed(x, y, button)
+
     if state.exitPromptOpen then
         if button == 2 then
             Controls.closeExitPrompt()
@@ -93,7 +120,59 @@ function Controls.mousepressed(x, y, button)
         return true
     end
 
-    return FateLogic.mousepressed(x, y, button)
+    if AgencyLogic.mousepressed(
+        x,
+        y,
+        button,
+        SpawnerLogic.getSelectedAgent(),
+        SpawnerLogic.getAgencyButtonBounds()
+    ) then
+        if AgencyLogic.isModalOpen() then
+            BattleMap.clearHoveredCell()
+        end
+
+        return true
+    end
+
+    if FateLogic.mousepressed(x, y, button) then
+        if FateLogic.isModalOpen() then
+            BattleMap.clearHoveredCell()
+        end
+
+        return true
+    end
+
+    if PreparationLogic.isActive() then
+        if PreparationLogic.mousepressed(
+            x,
+            y,
+            button,
+            FateLogic.getButtonGroupBounds()
+        ) then
+            return true
+        end
+
+        return true
+    end
+
+    if TurnLogic.mousepressed(
+        x,
+        y,
+        button,
+        FateLogic.getButtonGroupBounds()
+    ) then
+        return true
+    end
+
+    if button == 2 then
+        return agentDeselected
+    end
+
+    return SpawnerLogic.mousepressed(x, y, button)
+end
+
+function Controls.mousereleased(x, y, button)
+    return PreparationLogic.mousereleased(x, y, button)
 end
 
 function Controls.wheelmoved(_, wheelY)
@@ -103,7 +182,23 @@ function Controls.wheelmoved(_, wheelY)
 
     local mouseX, mouseY = love.mouse.getPosition()
 
+    if AgencyLogic.wheelmoved(mouseX, mouseY, wheelY) then
+        return true
+    end
+
     return FateLogic.wheelmoved(mouseX, mouseY, wheelY)
+end
+
+function Controls.mousemoved(x, y)
+    if state.exitPromptOpen
+        or FateLogic.isModalOpen()
+        or AgencyLogic.isModalOpen() then
+        BattleMap.clearHoveredCell()
+        return
+    end
+
+    PreparationLogic.mousemoved(x, y)
+    BattleMap.updateHoveredCell(x, y)
 end
 
 local function drawButton(label, bounds, color)

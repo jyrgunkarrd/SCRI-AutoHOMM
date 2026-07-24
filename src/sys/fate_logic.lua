@@ -1,12 +1,19 @@
 local ImageLoader = require("src.assets.image_loader")
+local Sfx = require("src.sys.sfx")
 
 local FateStacks = require("data.fate_stacks")
 local FateTiles = require("data.fate_tiles")
+local HostileFateDefinition = require("data.dev_hostile_fate")
 
 local FateLogic = {}
 
 local ICON_PATH = "assets/images/icons/fate.webp"
+local HOSTILE_ICON_PATH = "assets/images/icons/hostile_fate.webp"
+local ICON_FONT_PATH = "assets/fonts/icons.otf"
+local ICON_FONT_SIZE = 22
+local FAIL_GLYPH = "\239\129\158" -- U+F05E
 local BUTTON_SIZE = 74
+local BUTTON_GAP = 8
 local MODAL_MARGIN_X = 60
 local MODAL_TOP = 86
 local MODAL_BOTTOM = 70
@@ -27,10 +34,12 @@ local COLORS = {
     text = { 1, 1, 1, 1 },
     muted = { 0.65, 0.69, 0.76, 1 },
     button = { 0.12, 0.15, 0.22, 1 },
-    normalTile = { 0.15, 0.27, 0.43, 1 },
-    negativeTile = { 0.50, 0.16, 0.18, 1 },
-    failTile = { 0.28, 0.04, 0.055, 1 },
-    criticalTile = { 0.64, 0.45, 0.08, 1 },
+    neutralTile = { 61 / 255, 61 / 255, 61 / 255, 1 },
+    positiveTile = { 38 / 255, 68 / 255, 109 / 255, 1 },
+    negativeTile = { 207 / 255, 2 / 255, 0, 1 },
+    failTile = { 0, 0, 0, 1 },
+    criticalTile = { 1, 165 / 255, 0, 1 },
+    criticalText = { 0, 0, 0, 1 },
     scrollTrack = { 0.03, 0.035, 0.05, 1 },
     scrollThumb = { 0.56, 0.62, 0.72, 1 },
 }
@@ -40,7 +49,10 @@ local tilesById = {}
 local runtimeStacks = {}
 local activeIndex = 1
 local icon
-local modalOpen = false
+local hostileIcon
+local iconFont
+local hostileStack
+local openDeck
 
 local function indexDefinitions(definitions, label)
     local index = {}
@@ -83,19 +95,17 @@ local function newTileObject(definition, serial, origin)
     }
 end
 
-local function buildRuntimeStack(entity)
-    local stackId = entity.definition.fate
-
+local function buildRuntimeStack(stackId, owner, ownerLabel)
     if type(stackId) ~= "string" or not stackId:match("%S") then
-        return nil, ("JACL %q requires a fate stack id"):format(entity.id)
+        return nil, ("%s requires a fate stack id"):format(ownerLabel)
     end
 
     local definition = stacksById[stackId]
 
     if not definition then
         return nil, (
-            "JACL %q references unknown fate stack %q"
-        ):format(entity.id, stackId)
+            "%s references unknown fate stack %q"
+        ):format(ownerLabel, stackId)
     end
 
     if type(definition.tiles) ~= "table" then
@@ -150,7 +160,8 @@ local function buildRuntimeStack(entity)
     return {
         id = definition.id,
         definition = definition,
-        entity = entity,
+        owner = owner,
+        ownerLabel = ownerLabel,
         slots = slots,
         discarded = {
             id = "discarded",
@@ -169,13 +180,39 @@ local function getActiveStack()
     return runtimeStacks[activeIndex]
 end
 
-local function getButtonBounds()
+local function getButtonGroupBounds()
+    local width = BUTTON_SIZE * 2 + BUTTON_GAP
+
     return {
-        x = (love.graphics.getWidth() - BUTTON_SIZE) / 2,
+        x = (love.graphics.getWidth() - width) / 2,
         y = 12,
+        width = width,
+        height = BUTTON_SIZE,
+    }
+end
+
+local function getButtonBounds(deck)
+    local group = getButtonGroupBounds()
+    local offset = deck == "hostile"
+        and BUTTON_SIZE + BUTTON_GAP
+        or 0
+
+    return {
+        x = group.x + offset,
+        y = group.y,
         width = BUTTON_SIZE,
         height = BUTTON_SIZE,
     }
+end
+
+local function getOpenStack()
+    if openDeck == "hostile" then
+        return hostileStack
+    end
+
+    if openDeck == "jacl" then
+        return getActiveStack()
+    end
 end
 
 local function getModalBounds()
@@ -202,13 +239,15 @@ local function addPanel(panels, panelState, title, x, y, width, height)
 end
 
 function FateLogic.getLayout()
-    local stack = getActiveStack()
+    local stack = getOpenStack() or getActiveStack()
     local modal = getModalBounds()
     local panels = {}
 
     if not stack then
         return {
-            button = getButtonBounds(),
+            button = getButtonBounds("jacl"),
+            hostileButton = getButtonBounds("hostile"),
+            buttonGroup = getButtonGroupBounds(),
             modal = modal,
             panels = panels,
         }
@@ -274,7 +313,9 @@ function FateLogic.getLayout()
     )
 
     return {
-        button = getButtonBounds(),
+        button = getButtonBounds("jacl"),
+        hostileButton = getButtonBounds("hostile"),
+        buttonGroup = getButtonGroupBounds(),
         modal = modal,
         panels = panels,
     }
@@ -307,16 +348,18 @@ local function getTileColor(definition)
         return COLORS.criticalTile
     elseif definition.neg then
         return COLORS.negativeTile
+    elseif definition.value > 0 then
+        return COLORS.positiveTile
     end
 
-    return COLORS.normalTile
+    return COLORS.neutralTile
 end
 
 local function getTileValueLabel(definition)
     if definition.fail then
-        return "FAIL"
+        return FAIL_GLYPH
     elseif definition.crit then
-        return ("CRIT +%s"):format(tostring(definition.value))
+        return ("(+%s) X2"):format(tostring(definition.value))
     elseif definition.neg then
         return "-" .. tostring(definition.value)
     elseif definition.value > 0 then
@@ -332,8 +375,20 @@ local function drawTile(tile, x, y, width)
     love.graphics.setColor(COLORS.border)
     love.graphics.setLineWidth(1)
     love.graphics.rectangle("line", x, y, width, TILE_HEIGHT, 4, 4)
-    love.graphics.setColor(COLORS.text)
+    local textColor = tile.definition.crit
+        and COLORS.criticalText
+        or COLORS.text
+
+    love.graphics.setColor(textColor)
     love.graphics.printf(tile.id, x + 7, y + 7, width - 14, "left")
+
+    local previousFont
+
+    if tile.definition.fail then
+        previousFont = love.graphics.getFont()
+        love.graphics.setFont(iconFont)
+    end
+
     love.graphics.printf(
         getTileValueLabel(tile.definition),
         x + 7,
@@ -341,6 +396,10 @@ local function drawTile(tile, x, y, width)
         width - 14,
         "right"
     )
+
+    if previousFont then
+        love.graphics.setFont(previousFont)
+    end
 end
 
 local function drawPanel(panel)
@@ -447,7 +506,7 @@ local function drawPanel(panel)
     end
 end
 
-local function drawButton(bounds)
+local function drawButton(bounds, buttonIcon)
     love.graphics.setColor(COLORS.button)
     love.graphics.rectangle(
         "fill",
@@ -470,14 +529,14 @@ local function drawButton(bounds)
         5
     )
 
-    if icon then
-        local width, height = icon:getDimensions()
+    if buttonIcon then
+        local width, height = buttonIcon:getDimensions()
         local available = BUTTON_SIZE - 18
         local scale = available / math.max(width, height)
 
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.draw(
-            icon,
+            buttonIcon,
             bounds.x + bounds.width / 2,
             bounds.y + bounds.height / 2,
             0,
@@ -494,7 +553,11 @@ function FateLogic.loadEntities(entities)
 
     for _, entity in ipairs(entities) do
         if entity.entityType == "JACL" then
-            local stack, stackError = buildRuntimeStack(entity)
+            local stack, stackError = buildRuntimeStack(
+                entity.definition.fate,
+                entity,
+                ("JACL %q"):format(entity.id)
+            )
 
             if not stack then
                 return nil, stackError
@@ -505,6 +568,20 @@ function FateLogic.loadEntities(entities)
         end
     end
 
+    if type(HostileFateDefinition) ~= "table" then
+        return nil, "dev_hostile_fate.lua must return a table"
+    end
+
+    local nextHostileStack, hostileStackError = buildRuntimeStack(
+        HostileFateDefinition.fate,
+        HostileFateDefinition,
+        "hostile Fate deck"
+    )
+
+    if not nextHostileStack then
+        return nil, hostileStackError
+    end
+
     local loaded, loadedIcon = pcall(ImageLoader.newImage, ICON_PATH)
 
     if not loaded then
@@ -513,10 +590,36 @@ function FateLogic.loadEntities(entities)
         ):format(ICON_PATH, tostring(loadedIcon))
     end
 
+    local hostileIconLoaded, loadedHostileIcon = pcall(
+        ImageLoader.newImage,
+        HOSTILE_ICON_PATH
+    )
+
+    if not hostileIconLoaded then
+        return nil, (
+            "unable to load hostile fate icon from %s: %s"
+        ):format(HOSTILE_ICON_PATH, tostring(loadedHostileIcon))
+    end
+
+    local fontLoaded, loadedIconFont = pcall(
+        love.graphics.newFont,
+        ICON_FONT_PATH,
+        ICON_FONT_SIZE
+    )
+
+    if not fontLoaded then
+        return nil, (
+            "unable to load fate tile icon font from %s: %s"
+        ):format(ICON_FONT_PATH, tostring(loadedIconFont))
+    end
+
     runtimeStacks = nextStacks
     activeIndex = 1
     icon = loadedIcon
-    modalOpen = false
+    hostileIcon = loadedHostileIcon
+    iconFont = loadedIconFont
+    hostileStack = nextHostileStack
+    openDeck = nil
 
     return runtimeStacks
 end
@@ -529,25 +632,71 @@ function FateLogic.getActiveStack()
     return getActiveStack()
 end
 
+function FateLogic.getButtonBounds()
+    return getButtonBounds("jacl")
+end
+
+function FateLogic.getHostileStack()
+    return hostileStack
+end
+
+function FateLogic.getHostileButtonBounds()
+    return getButtonBounds("hostile")
+end
+
+function FateLogic.getButtonGroupBounds()
+    return getButtonGroupBounds()
+end
+
 function FateLogic.isModalOpen()
-    return modalOpen
+    return openDeck ~= nil
 end
 
 function FateLogic.close()
-    modalOpen = false
+    openDeck = nil
+end
+
+function FateLogic.open(deck)
+    deck = deck or "jacl"
+
+    if openDeck then
+        return false
+    end
+
+    if deck == "jacl" and not getActiveStack() then
+        return false
+    end
+
+    if deck == "hostile" and not hostileStack then
+        return false
+    end
+
+    if deck ~= "jacl" and deck ~= "hostile" then
+        return false
+    end
+
+    openDeck = deck
+    Sfx.play("click")
+
+    return true
 end
 
 function FateLogic.keypressed(key)
     if key == "f" and getActiveStack() then
-        modalOpen = not modalOpen
+        if openDeck then
+            FateLogic.close()
+        else
+            FateLogic.open("jacl")
+        end
+
         return true
     end
 
-    return modalOpen
+    return openDeck ~= nil
 end
 
 function FateLogic.mousepressed(x, y, button)
-    if modalOpen then
+    if openDeck then
         if button == 2 then
             FateLogic.close()
         elseif button == 1 then
@@ -563,8 +712,15 @@ function FateLogic.mousepressed(x, y, button)
 
     if button == 1
         and getActiveStack()
-        and isInside(x, y, getButtonBounds()) then
-        modalOpen = true
+        and isInside(x, y, getButtonBounds("jacl")) then
+        FateLogic.open("jacl")
+        return true
+    end
+
+    if button == 1
+        and hostileStack
+        and isInside(x, y, getButtonBounds("hostile")) then
+        FateLogic.open("hostile")
         return true
     end
 
@@ -572,7 +728,7 @@ function FateLogic.mousepressed(x, y, button)
 end
 
 function FateLogic.wheelmoved(mouseX, mouseY, wheelY)
-    if not modalOpen then
+    if not openDeck then
         return false
     end
 
@@ -594,16 +750,24 @@ function FateLogic.wheelmoved(mouseX, mouseY, wheelY)
 end
 
 function FateLogic.draw()
-    local stack = getActiveStack()
+    local stack = getOpenStack()
+    local jaclStack = getActiveStack()
 
-    if not stack then
+    if not jaclStack and not hostileStack then
         return
     end
 
     local layout = FateLogic.getLayout()
-    drawButton(layout.button)
 
-    if not modalOpen then
+    if jaclStack then
+        drawButton(layout.button, icon)
+    end
+
+    if hostileStack then
+        drawButton(layout.hostileButton, hostileIcon)
+    end
+
+    if not openDeck or not stack then
         return
     end
 
@@ -636,7 +800,9 @@ function FateLogic.draw()
     )
     love.graphics.setColor(COLORS.text)
     love.graphics.printf(
-        "FATE STACK — " .. stack.entity.definition.name,
+        openDeck == "hostile"
+            and "HOSTILE FATE STACK"
+            or "FATE STACK — " .. stack.owner.definition.name,
         modal.x,
         modal.y + 20,
         modal.width,

@@ -9,6 +9,9 @@ local MAIN_START_COLUMN = 0
 local HEX_RADIUS = 42
 
 local GRID_COLOR = { 0.36, 0.66, 0.78, 1 }
+local HOVER_FILL_COLOR = { 1, 1, 1, 0.10 }
+local HOVER_OUTLINE_COLOR = { 1, 1, 1, 0.62 }
+local HOVER_OUTLINE_WIDTH = 2.5
 
 -- Both map sections use this shared lattice origin. Row 3 is deliberately
 -- left empty, creating a one-row gap above the primary map.
@@ -39,6 +42,7 @@ end
 
 local cells = {}
 local cellsByKey = {}
+local hoveredCell
 
 local function addCell(column, row, section)
     local centerX, centerY = getHexCenter(column, row)
@@ -155,6 +159,43 @@ function BattleMap.drawHexOutline(cell, color, lineWidth)
         "line",
         hexVertices(cell.x, cell.y, HEX_RADIUS)
     )
+end
+
+function BattleMap.setHoveredCell(cell)
+    hoveredCell = cell
+end
+
+function BattleMap.updateHoveredCell(x, y)
+    hoveredCell = BattleMap.getHexAt(x, y)
+
+    return hoveredCell
+end
+
+function BattleMap.clearHoveredCell()
+    hoveredCell = nil
+end
+
+function BattleMap.getHoveredCell()
+    return hoveredCell
+end
+
+function BattleMap.drawHover()
+    if not hoveredCell then
+        return
+    end
+
+    local vertices = hexVertices(
+        hoveredCell.x,
+        hoveredCell.y,
+        HEX_RADIUS
+    )
+
+    love.graphics.setColor(HOVER_FILL_COLOR)
+    love.graphics.polygon("fill", vertices)
+    love.graphics.setColor(HOVER_OUTLINE_COLOR)
+    love.graphics.setLineWidth(HOVER_OUTLINE_WIDTH)
+    love.graphics.polygon("line", vertices)
+    love.graphics.setColor(1, 1, 1, 1)
 end
 
 function BattleMap.draw(tileColors)

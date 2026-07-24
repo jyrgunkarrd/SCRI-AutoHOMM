@@ -5,6 +5,14 @@ local sources = {
         name = "data.entities.jacls",
         definitions = require("data.entities.jacls"),
     },
+    {
+        name = "data.entities.agents",
+        definitions = require("data.entities.agents"),
+    },
+    {
+        name = "data.entities.hostiles",
+        definitions = require("data.entities.hostiles"),
+    },
 }
 
 local entitiesById = {}
