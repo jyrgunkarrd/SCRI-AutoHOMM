@@ -162,6 +162,26 @@ local function getModalBounds()
     }
 end
 
+local function getRandomIndex(limit, random)
+    if limit < 1 then
+        return nil
+    end
+
+    local value
+
+    if random then
+        value = random(limit)
+    elseif love and love.math and love.math.random then
+        value = love.math.random(limit)
+    else
+        value = math.random(limit)
+    end
+
+    value = math.floor(tonumber(value) or 1)
+
+    return math.max(1, math.min(limit, value))
+end
+
 local function addPanel(panels, state, title, x, y, width, height, columns)
     panels[#panels + 1] = {
         state = state,
@@ -522,6 +542,39 @@ end
 
 function AgencyLogic.getActiveStack()
     return activeStack
+end
+
+function AgencyLogic.drawTile(stack, random)
+    if type(stack) ~= "table" or type(stack.tiles) ~= "table" then
+        return nil, "a valid Agency stack is required"
+    end
+
+    if #stack.tiles == 0 then
+        return nil, ("Agency stack %q has no tiles to draw"):format(
+            tostring(stack.id)
+        )
+    end
+
+    return table.remove(
+        stack.tiles,
+        getRandomIndex(#stack.tiles, random)
+    )
+end
+
+function AgencyLogic.discardTile(stack, tile)
+    if type(stack) ~= "table"
+        or type(stack.discarded) ~= "table"
+        or type(stack.discarded.tiles) ~= "table" then
+        return nil, "a valid Agency stack is required"
+    end
+
+    if type(tile) ~= "table" then
+        return nil, "a valid Agency tile is required"
+    end
+
+    stack.discarded.tiles[#stack.discarded.tiles + 1] = tile
+
+    return true
 end
 
 function AgencyLogic.isModalOpen()

@@ -1,9 +1,11 @@
 local Sfx = {}
 
 local DEFINITIONS = {
+    bonus_action = "assets/audio/sfx/bonus_action.wav",
     click = "assets/audio/sfx/click.wav",
     prepared = "assets/audio/sfx/prepared.wav",
     round_start = "assets/audio/sfx/round_start.wav",
+    skip_turn = "assets/audio/sfx/skip_turn.wav",
 }
 
 local sources = {}

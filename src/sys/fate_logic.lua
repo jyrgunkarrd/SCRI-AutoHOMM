@@ -215,6 +215,33 @@ local function getOpenStack()
     end
 end
 
+local function getRandomIndex(limit, random)
+    if limit < 1 then
+        return nil
+    end
+
+    local value
+
+    if random then
+        value = random(limit)
+    elseif love and love.math and love.math.random then
+        value = love.math.random(limit)
+    else
+        value = math.random(limit)
+    end
+
+    value = math.floor(tonumber(value) or 1)
+
+    return math.max(1, math.min(limit, value))
+end
+
+local function shuffleTiles(tiles, random)
+    for index = #tiles, 2, -1 do
+        local other = getRandomIndex(index, random)
+        tiles[index], tiles[other] = tiles[other], tiles[index]
+    end
+end
+
 local function getModalBounds()
     local width = love.graphics.getWidth() - MODAL_MARGIN_X * 2
     local height = love.graphics.getHeight() - MODAL_TOP - MODAL_BOTTOM
@@ -646,6 +673,105 @@ end
 
 function FateLogic.getButtonGroupBounds()
     return getButtonGroupBounds()
+end
+
+function FateLogic.drawModifier(stack, random)
+    if type(stack) ~= "table" or type(stack.slots) ~= "table" then
+        return nil, "a valid Fate stack is required"
+    end
+
+    local tileCount = 0
+
+    for _, slot in ipairs(stack.slots) do
+        tileCount = tileCount + #slot.tiles
+    end
+
+    if tileCount == 0 then
+        return nil, ("Fate stack %q has no tiles to draw"):format(
+            tostring(stack.id)
+        )
+    end
+
+    local selectedIndex = getRandomIndex(tileCount, random)
+
+    for _, slot in ipairs(stack.slots) do
+        if selectedIndex <= #slot.tiles then
+            local tile = table.remove(slot.tiles, selectedIndex)
+            tile.drawnFromSlot = slot.id
+
+            return tile
+        end
+
+        selectedIndex = selectedIndex - #slot.tiles
+    end
+
+    return nil, "unable to select a Fate tile"
+end
+
+function FateLogic.reshuffleDiscard(stack, random)
+    if type(stack) ~= "table"
+        or type(stack.slots) ~= "table"
+        or type(stack.discarded) ~= "table"
+        or type(stack.discarded.tiles) ~= "table" then
+        return nil, "a valid Fate stack is required"
+    end
+
+    local slotsById = {}
+
+    for _, slot in ipairs(stack.slots) do
+        slotsById[slot.id] = slot
+    end
+
+    for _, tile in ipairs(stack.discarded.tiles) do
+        local slot = slotsById[tile.drawnFromSlot or tile.id]
+
+        if not slot then
+            return nil, (
+                "Fate tile %q has no matching stack slot"
+            ):format(tostring(tile.id))
+        end
+
+        tile.drawnFromSlot = nil
+        slot.tiles[#slot.tiles + 1] = tile
+    end
+
+    stack.discarded.tiles = {}
+    stack.discarded.scroll = 0
+
+    for _, slot in ipairs(stack.slots) do
+        shuffleTiles(slot.tiles, random)
+    end
+
+    return true
+end
+
+function FateLogic.discardModifier(stack, tile, random)
+    if type(stack) ~= "table"
+        or type(stack.discarded) ~= "table"
+        or type(stack.discarded.tiles) ~= "table" then
+        return nil, "a valid Fate stack is required"
+    end
+
+    if type(tile) ~= "table" or type(tile.definition) ~= "table" then
+        return nil, "a valid Fate tile is required"
+    end
+
+    stack.discarded.tiles[#stack.discarded.tiles + 1] = tile
+
+    if tile.definition.fail or tile.definition.crit then
+        local reshuffled, reshuffleError = FateLogic.reshuffleDiscard(
+            stack,
+            random
+        )
+
+        if not reshuffled then
+            return nil, reshuffleError
+        end
+
+        return true, true
+    end
+
+    return true, false
 end
 
 function FateLogic.isModalOpen()

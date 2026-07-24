@@ -12,6 +12,7 @@ local PORTRAIT_DIAMETER_IN_HEX_RADII = {
 }
 local PORTRAIT_OUTLINE_COLOR = { 0, 0, 0, 1 }
 local PORTRAIT_OUTLINE_WIDTH = 4
+local EXHAUSTED_PORTRAIT_OPACITY = 0.4
 local PROFILE_MARGIN = 12
 local PROFILE_PADDING = 12
 local PROFILE_TOP = 18
@@ -801,6 +802,7 @@ function AgentLogic.draw(entity)
         * PORTRAIT_DIAMETER_IN_HEX_RADII[size]
     local imageWidth, imageHeight = entity.portrait:getDimensions()
     local pulseScale = getPulseScale(entity)
+        * (entity.initiativeEffectScale or 1)
     local scale = diameter / math.max(imageWidth, imageHeight) * pulseScale
 
     love.graphics.stencil(function()
@@ -817,8 +819,18 @@ function AgentLogic.draw(entity)
         end
     end, "replace", 1)
 
+    local exhaustedOpacity = entity.exhausted
+        and not entity.initiativeExhaustionPending
+        and EXHAUSTED_PORTRAIT_OPACITY
+        or 1
+
     love.graphics.setStencilTest("equal", 1)
-    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setColor(
+        entity.initiativeEffectRed or 1,
+        entity.initiativeEffectGreen or 1,
+        entity.initiativeEffectBlue or 1,
+        entity.initiativeEffectOpacity or exhaustedOpacity
+    )
     love.graphics.draw(
         entity.portrait,
         entity.anchor.x,

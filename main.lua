@@ -99,6 +99,7 @@ local FateLogic = require("src.sys.fate_logic")
 local AgencyLogic = require("src.sys.agency_logic")
 local TurnLogic = require("src.sys.turn_logic")
 local PreparationLogic = require("src.sys.preparation_logic")
+local ReflexLogic = require("src.sys.reflex_logic")
 local Controls = require("src.input.controls")
 
 local DEFAULT_FONT_PATH = "assets/fonts/Furore.otf"
@@ -136,6 +137,18 @@ function love.load()
         error("Failed to load Agency stacks: " .. tostring(agencyError))
     end
 
+    ReflexLogic.reset()
+    TurnLogic.setResolutionHandler(function(phase, round)
+        if phase == "Reflex" then
+            return ReflexLogic.resolveRound(entities, round)
+        end
+
+        return true
+    end)
+    TurnLogic.setResolutionReadyCheck(function(phase)
+        return phase ~= "Reflex" or not ReflexLogic.isAnimating()
+    end)
+
     if not PreparationLogic.loadMap(map) then
         TurnLogic.begin()
     end
@@ -150,6 +163,7 @@ function love.draw()
     end
 
     SpawnerLogic.drawEntities()
+    ReflexLogic.drawMapEffects()
     BattleMap.drawHover()
     SpawnerLogic.drawInterface()
 
@@ -159,6 +173,11 @@ function love.draw()
         TurnLogic.draw(FateLogic.getButtonGroupBounds())
     end
 
+    ReflexLogic.draw(
+        TurnLogic.getRound(),
+        FateLogic.getButtonBounds(),
+        FateLogic.getHostileButtonBounds()
+    )
     FateLogic.draw()
     AgencyLogic.draw()
     Controls.draw()
@@ -166,6 +185,7 @@ end
 
 function love.update(dt)
     SpawnerLogic.update(dt)
+    ReflexLogic.update(dt)
 
     if not PreparationLogic.isActive() then
         TurnLogic.update(dt)

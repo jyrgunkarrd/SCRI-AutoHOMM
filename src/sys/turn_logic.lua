@@ -38,6 +38,8 @@ local phaseState = "queue"
 local stateElapsed = 0
 local autoEnabled = false
 local started = false
+local resolutionHandler
+local resolutionReadyCheck
 
 local function isInside(x, y, bounds)
     return x >= bounds.x
@@ -53,6 +55,24 @@ local function beginResolution()
 
     phaseState = "resolution"
     stateElapsed = 0
+
+    if resolutionHandler then
+        local handled, result, handlerError = pcall(
+            resolutionHandler,
+            PHASES[currentPhaseIndex],
+            round
+        )
+
+        if not handled then
+            phaseState = "queue"
+            error(result)
+        end
+
+        if result == nil then
+            phaseState = "queue"
+            error(handlerError or "phase resolution handler failed")
+        end
+    end
 
     return true
 end
@@ -79,6 +99,8 @@ function TurnLogic.reset()
     stateElapsed = 0
     autoEnabled = false
     started = false
+    resolutionHandler = nil
+    resolutionReadyCheck = nil
 end
 
 function TurnLogic.begin()
@@ -94,6 +116,26 @@ end
 
 function TurnLogic.hasBegun()
     return started
+end
+
+function TurnLogic.setResolutionHandler(handler)
+    if handler ~= nil and type(handler) ~= "function" then
+        return nil, "resolution handler must be a function or nil"
+    end
+
+    resolutionHandler = handler
+
+    return true
+end
+
+function TurnLogic.setResolutionReadyCheck(check)
+    if check ~= nil and type(check) ~= "function" then
+        return nil, "resolution ready check must be a function or nil"
+    end
+
+    resolutionReadyCheck = check
+
+    return true
 end
 
 function TurnLogic.getPhases()
@@ -204,7 +246,14 @@ function TurnLogic.update(dt)
     stateElapsed = stateElapsed + dt
 
     if phaseState == "resolution"
-        and stateElapsed >= RESOLUTION_DURATION then
+        and stateElapsed >= RESOLUTION_DURATION
+        and (
+            not resolutionReadyCheck
+            or resolutionReadyCheck(
+                PHASES[currentPhaseIndex],
+                round
+            )
+        ) then
         phaseState = "cleanup"
         stateElapsed = 0
     elseif phaseState == "cleanup"
