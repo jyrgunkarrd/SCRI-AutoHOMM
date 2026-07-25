@@ -1,13 +1,14 @@
 local BattleMap = require("src.sys.battle_map")
 local MapPathfindingLogic = require("src.sys.map_pathfinding_logic")
 local ReflexLogic = require("src.sys.reflex_logic")
+local Sfx = require("src.sys.sfx")
 local SpawnerLogic = require("src.sys.spawner_logic")
 
 local MovementSpdLogic = {}
 
 local PREVIEW_DURATION = 0.45
-local MOVE_BASE_DURATION = 0.22
-local MOVE_DURATION_PER_HEX = 0.18
+local MOVE_BASE_DURATION = 0.11
+local MOVE_DURATION_PER_HEX = 0.09
 local GHOST_OPACITY = 0.38
 local OVERLAY_OUTLINE_WIDTH = 2
 local TOKEN_OUTLINE_WIDTH = 4
@@ -28,6 +29,7 @@ local currentAction
 local actionIndex = 0
 local processing = false
 local resolvedRound
+local marchEntities = {}
 
 local function getStat(entity, requestedName)
     for _, statEntry in ipairs(entity.definition.stats or {}) do
@@ -76,7 +78,7 @@ local function isInOpposingZoneOfControl(entity)
         for _, neighbor in ipairs(BattleMap.getNeighbors(occupiedCell)) do
             local occupant = SpawnerLogic.getEntityAt(neighbor)
 
-            if isOpponent(entity, occupant) then
+            if isOpponent(entity, occupant) and not occupant.dead then
                 return true
             end
         end
@@ -90,7 +92,7 @@ local function getClosestOpponent(entity, entities)
     local closestDistance = math.huge
 
     for _, candidate in ipairs(entities) do
-        if isOpponent(entity, candidate) then
+        if isOpponent(entity, candidate) and not candidate.dead then
             local distance = getFootprintDistance(
                 entity.footprint,
                 candidate.footprint
@@ -219,34 +221,40 @@ local function prepareNextAction(entities)
         end
 
         local entity = entry.entity
-        local target = getClosestOpponent(entity, entities)
 
-        ReflexLogic.setPhaseActiveEntry(entry)
+        if not entity.dead then
+            local target = getClosestOpponent(entity, entities)
 
-        if target then
-            local speed = math.max(0, math.floor(getStat(entity, "spd")))
-            local destination, path, reachable = selectDestination(
-                entity,
-                target,
-                speed
-            )
+            ReflexLogic.setPhaseActiveEntry(entry)
 
-            if destination ~= entity.anchor and #path > 1 then
-                currentAction = {
-                    entry = entry,
-                    entity = entity,
-                    target = target,
-                    origin = entity.anchor,
-                    destination = destination,
-                    path = path,
-                    reachable = reachable,
-                    state = "preview",
-                    elapsed = 0,
-                    moveDuration = MOVE_BASE_DURATION
-                        + (#path - 1) * MOVE_DURATION_PER_HEX,
-                }
+            if target then
+                local speed = math.max(
+                    0,
+                    math.floor(getStat(entity, "spd"))
+                )
+                local destination, path, reachable = selectDestination(
+                    entity,
+                    target,
+                    speed
+                )
 
-                return true
+                if destination ~= entity.anchor and #path > 1 then
+                    currentAction = {
+                        entry = entry,
+                        entity = entity,
+                        target = target,
+                        origin = entity.anchor,
+                        destination = destination,
+                        path = path,
+                        reachable = reachable,
+                        state = "preview",
+                        elapsed = 0,
+                        moveDuration = MOVE_BASE_DURATION
+                            + (#path - 1) * MOVE_DURATION_PER_HEX,
+                    }
+
+                    return true
+                end
             end
         end
     end
@@ -357,16 +365,18 @@ function MovementSpdLogic.reset()
     actionIndex = 0
     processing = false
     resolvedRound = nil
+    marchEntities = {}
     ReflexLogic.setPhaseActiveEntry(nil)
 end
 
 function MovementSpdLogic.beginMarch(entities, round)
     MovementSpdLogic.reset()
     resolvedRound = round
+    marchEntities = entities or {}
 
     local blockedByZoneOfControl = {}
 
-    for _, entity in ipairs(entities or {}) do
+    for _, entity in ipairs(marchEntities) do
         if entity.entityType == "AGENT"
             or entity.entityType == "HOSTILE" then
             blockedByZoneOfControl[entity] =
@@ -381,9 +391,41 @@ function MovementSpdLogic.beginMarch(entities, round)
     end
 
     processing = true
-    prepareNextAction(entities)
+    prepareNextAction(marchEntities)
 
     return phaseQueue
+end
+
+function MovementSpdLogic.removeEntity(entity)
+    local nextQueue = {}
+    local nextActionIndex = 0
+    local removed = 0
+
+    for index, entry in ipairs(phaseQueue) do
+        if entry.entity == entity then
+            removed = removed + 1
+        else
+            nextQueue[#nextQueue + 1] = entry
+
+            if index <= actionIndex then
+                nextActionIndex = nextActionIndex + 1
+            end
+        end
+    end
+
+    phaseQueue = nextQueue
+    actionIndex = nextActionIndex
+
+    if currentAction and currentAction.entity == entity then
+        clearMovementVisual(entity)
+        currentAction = nil
+
+        if processing then
+            prepareNextAction(marchEntities)
+        end
+    end
+
+    return removed
 end
 
 function MovementSpdLogic.isProcessing()
@@ -403,7 +445,17 @@ function MovementSpdLogic.getResolvedRound()
 end
 
 function MovementSpdLogic.update(dt, entities)
-    if not processing or not currentAction then
+    if not processing then
+        return
+    end
+
+    if currentAction and currentAction.entity.dead then
+        clearMovementVisual(currentAction.entity)
+        currentAction = nil
+        prepareNextAction(entities)
+    end
+
+    if not currentAction then
         return
     end
 
@@ -430,6 +482,7 @@ function MovementSpdLogic.update(dt, entities)
                 action.elapsed = 0
                 action.entity.movementVisualX = action.origin.x
                 action.entity.movementVisualY = action.origin.y
+                Sfx.play("march")
             else
                 clearMovementVisual(action.entity)
                 SpawnerLogic.moveEntity(

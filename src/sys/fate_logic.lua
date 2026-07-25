@@ -396,17 +396,35 @@ local function getTileValueLabel(definition)
     return "0"
 end
 
-local function drawTile(tile, x, y, width)
-    love.graphics.setColor(getTileColor(tile.definition))
+local function drawTile(tile, x, y, width, opacity)
+    opacity = opacity or 1
+    local tileColor = getTileColor(tile.definition)
+
+    love.graphics.setColor(
+        tileColor[1],
+        tileColor[2],
+        tileColor[3],
+        tileColor[4] * opacity
+    )
     love.graphics.rectangle("fill", x, y, width, TILE_HEIGHT, 4, 4)
-    love.graphics.setColor(COLORS.border)
+    love.graphics.setColor(
+        COLORS.border[1],
+        COLORS.border[2],
+        COLORS.border[3],
+        COLORS.border[4] * opacity
+    )
     love.graphics.setLineWidth(1)
     love.graphics.rectangle("line", x, y, width, TILE_HEIGHT, 4, 4)
     local textColor = tile.definition.crit
         and COLORS.criticalText
         or COLORS.text
 
-    love.graphics.setColor(textColor)
+    love.graphics.setColor(
+        textColor[1],
+        textColor[2],
+        textColor[3],
+        textColor[4] * opacity
+    )
     love.graphics.printf(tile.id, x + 7, y + 7, width - 14, "left")
 
     local previousFont
@@ -706,6 +724,16 @@ function FateLogic.drawModifier(stack, random)
     end
 
     return nil, "unable to select a Fate tile"
+end
+
+function FateLogic.drawTileCard(tile, x, y, width, opacity)
+    if type(tile) ~= "table" or type(tile.definition) ~= "table" then
+        return nil, "a valid Fate tile is required"
+    end
+
+    drawTile(tile, x, y, width, opacity)
+
+    return TILE_HEIGHT
 end
 
 function FateLogic.reshuffleDiscard(stack, random)

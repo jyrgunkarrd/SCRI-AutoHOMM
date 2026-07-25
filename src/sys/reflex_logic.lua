@@ -1,5 +1,6 @@
 local AgencyLogic = require("src.sys.agency_logic")
 local BattleMap = require("src.sys.battle_map")
+local BlockLogic = require("src.sys.block_logic")
 local FateLogic = require("src.sys.fate_logic")
 local Sfx = require("src.sys.sfx")
 
@@ -32,6 +33,7 @@ local COLORS = {
 }
 
 local initiativeSequence = {}
+local roundInitiativeSequence = {}
 local agentQueue = {}
 local hostileQueue = {}
 local resolvedRound
@@ -40,6 +42,31 @@ local animationQueue = {}
 local activeAnimation
 local animatedEntities = {}
 local iconFont
+
+local function copySequence(sequence)
+    local copy = {}
+
+    for index, entry in ipairs(sequence) do
+        copy[index] = entry
+    end
+
+    return copy
+end
+
+local function withoutEntity(sequence, entity)
+    local filtered = {}
+    local removed = 0
+
+    for _, entry in ipairs(sequence) do
+        if entry.entity == entity then
+            removed = removed + 1
+        else
+            filtered[#filtered + 1] = entry
+        end
+    end
+
+    return filtered, removed
+end
 
 local function clamp(value, minimum, maximum)
     return math.max(minimum, math.min(maximum, value))
@@ -252,6 +279,17 @@ local function resolveEntity(entity, random, exceptionalEvents)
 
     if not agencyDiscarded then
         return nil, agencyDiscardError
+    end
+
+    local blockGranted, blockError = BlockLogic.grantFromAgencyTile(
+        entity,
+        agencyTile
+    )
+
+    if blockGranted == nil then
+        return nil, (
+            "unable to grant Agency tile Block to %q: %s"
+        ):format(tostring(entity.id), tostring(blockError))
     end
 
     local agility = getAgility(entity)
@@ -493,6 +531,7 @@ end
 function ReflexLogic.reset()
     clearAnimationState()
     initiativeSequence = {}
+    roundInitiativeSequence = {}
     agentQueue = {}
     hostileQueue = {}
     resolvedRound = nil
@@ -506,8 +545,10 @@ function ReflexLogic.resolveRound(entities, round, random)
     local exceptionalEvents = {}
 
     for _, entity in ipairs(entities or {}) do
-        if entity.entityType == "AGENT"
-            or entity.entityType == "HOSTILE" then
+        if (
+            entity.entityType == "AGENT"
+            or entity.entityType == "HOSTILE"
+        ) and not entity.dead then
             animatedEntities[#animatedEntities + 1] = entity
             entity.exhausted = false
             entity.initiativeFateTiles = nil
@@ -538,7 +579,8 @@ function ReflexLogic.resolveRound(entities, round, random)
         entry.position = position
     end
 
-    initiativeSequence = nextSequence
+    roundInitiativeSequence = nextSequence
+    initiativeSequence = copySequence(roundInitiativeSequence)
     resolvedRound = round
     phaseActiveEntry = nil
     animationQueue = exceptionalEvents
@@ -549,6 +591,84 @@ end
 
 function ReflexLogic.getInitiativeSequence()
     return initiativeSequence
+end
+
+function ReflexLogic.repopulateInitiativeSequence()
+    initiativeSequence = copySequence(roundInitiativeSequence)
+    phaseActiveEntry = nil
+    refreshSideQueues()
+
+    return initiativeSequence
+end
+
+function ReflexLogic.clearInitiativeSequence()
+    for _, entity in ipairs(animatedEntities) do
+        entity.exhausted = false
+        entity.initiativeFateTiles = nil
+        entity.initiativeAgencyTile = nil
+        entity.initiativeExhaustionPending = nil
+    end
+
+    clearAnimationState()
+    initiativeSequence = {}
+    roundInitiativeSequence = {}
+    agentQueue = {}
+    hostileQueue = {}
+    resolvedRound = nil
+    phaseActiveEntry = nil
+
+    return true
+end
+
+function ReflexLogic.removeEntity(entity)
+    if type(entity) ~= "table" then
+        return nil, "initiative removal requires an entity"
+    end
+
+    local removed
+
+    roundInitiativeSequence, removed = withoutEntity(
+        roundInitiativeSequence,
+        entity
+    )
+    initiativeSequence = withoutEntity(initiativeSequence, entity)
+
+    if phaseActiveEntry and phaseActiveEntry.entity == entity then
+        phaseActiveEntry = nil
+    end
+
+    local nextAnimations = {}
+
+    for _, animation in ipairs(animationQueue) do
+        if animation.entity ~= entity then
+            nextAnimations[#nextAnimations + 1] = animation
+        end
+    end
+
+    animationQueue = nextAnimations
+
+    if activeAnimation and activeAnimation.entity == entity then
+        clearEntityEffect(entity)
+        activeAnimation = nil
+    end
+
+    local nextAnimatedEntities = {}
+
+    for _, animatedEntity in ipairs(animatedEntities) do
+        if animatedEntity ~= entity then
+            nextAnimatedEntities[#nextAnimatedEntities + 1] =
+                animatedEntity
+        end
+    end
+
+    animatedEntities = nextAnimatedEntities
+    entity.initiativeFateTiles = nil
+    entity.initiativeAgencyTile = nil
+    entity.initiativeExhaustionPending = nil
+    clearEntityEffect(entity)
+    refreshSideQueues()
+
+    return removed
 end
 
 function ReflexLogic.getAgentQueue()

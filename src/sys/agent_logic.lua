@@ -1,5 +1,7 @@
 local ImageLoader = require("src.assets.image_loader")
 local BattleMap = require("src.sys.battle_map")
+local BlockLogic = require("src.sys.block_logic")
+local HealthLogic = require("src.sys.health_logic")
 local MapPathfindingLogic = require("src.sys.map_pathfinding_logic")
 local Sfx = require("src.sys.sfx")
 
@@ -12,6 +14,10 @@ local PORTRAIT_DIAMETER_IN_HEX_RADII = {
 }
 local PORTRAIT_OUTLINE_COLOR = { 0, 0, 0, 1 }
 local PORTRAIT_OUTLINE_WIDTH = 4
+local HEALTH_GAUGE_RADIUS = 10
+local HEALTH_GAUGE_BOTTOM_INSET = 8
+local BLOCK_GAUGE_RADIUS = 10
+local BLOCK_GAUGE_VERTEX_INSET = 8
 local EXHAUSTED_PORTRAIT_OPACITY = 0.4
 local PROFILE_MARGIN = 12
 local PROFILE_PADDING = 12
@@ -63,6 +69,7 @@ local activeShout
 local movementCells = {}
 local slotIconCache = {}
 local missingSlotIcons = {}
+local deadPortraitShader
 local agencyButtonIcon
 local agencyButtonIconMissing = false
 local agencyButtonBounds
@@ -77,6 +84,28 @@ local function buildHexPoints(centerX, centerY, radius)
     end
 
     return points
+end
+
+local function getDeadPortraitShader()
+    if not deadPortraitShader then
+        deadPortraitShader = love.graphics.newShader([[
+            vec4 effect(
+                vec4 color,
+                Image image,
+                vec2 textureCoordinates,
+                vec2 screenCoordinates
+            ) {
+                vec4 pixel = Texel(image, textureCoordinates);
+                float gray = dot(
+                    pixel.rgb,
+                    vec3(0.299, 0.587, 0.114)
+                );
+                return vec4(vec3(gray * 0.7), pixel.a) * color;
+            }
+        ]])
+    end
+
+    return deadPortraitShader
 end
 
 local function scalePointsFromCenter(points, centerX, centerY, scale)
@@ -783,7 +812,7 @@ function AgentLogic.spawn(definition, anchorCell)
         ):format(definition.id, profileImagePath, tostring(profileImage))
     end
 
-    return {
+    local entity = {
         id = definition.id,
         entityType = "AGENT",
         definition = definition,
@@ -794,6 +823,14 @@ function AgentLogic.spawn(definition, anchorCell)
         profileImage = profileImage,
         profileImagePath = profileImagePath,
     }
+
+    local healthy, healthError = HealthLogic.initialize(entity)
+
+    if not healthy then
+        return nil, healthError
+    end
+
+    return entity
 end
 
 function AgentLogic.draw(entity)
@@ -842,6 +879,11 @@ function AgentLogic.draw(entity)
         entity.initiativeEffectBlue or 1,
         entity.initiativeEffectOpacity or exhaustedOpacity
     )
+
+    if entity.dead then
+        love.graphics.setShader(getDeadPortraitShader())
+    end
+
     love.graphics.draw(
         entity.portrait,
         centerX,
@@ -852,6 +894,11 @@ function AgentLogic.draw(entity)
         imageWidth / 2,
         imageHeight / 2
     )
+
+    if entity.dead then
+        love.graphics.setShader()
+    end
+
     love.graphics.setStencilTest()
 
     local outlineRadius = (
@@ -864,6 +911,25 @@ function AgentLogic.draw(entity)
         "line",
         buildHexPoints(centerX, centerY, outlineRadius)
     )
+
+    HealthLogic.drawGauge(
+        entity,
+        centerX,
+        centerY + outlineRadius - HEALTH_GAUGE_BOTTOM_INSET,
+        HEALTH_GAUGE_RADIUS
+    )
+
+    local blockGaugeVertexRadius = outlineRadius
+        - BLOCK_GAUGE_VERTEX_INSET
+
+    BlockLogic.drawGauge(
+        entity,
+        centerX - math.sqrt(3) / 2 * blockGaugeVertexRadius,
+        centerY + blockGaugeVertexRadius / 2,
+        BLOCK_GAUGE_RADIUS
+    )
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setLineWidth(1)
 end
 
 function AgentLogic.update(dt)

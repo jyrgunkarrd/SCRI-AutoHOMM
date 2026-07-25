@@ -31,13 +31,13 @@ local agents = {
             {tgh = 1},
             {lex = 1}, 
         },
-        actions_art = {
+        steel_atk = {
             
-            { cardid = "ATK", art = "MAM_ATK" },
-            { cardid = "DFN", art = "MAM_DFN" },
+            { rng = 1 },
         
         },
         shout = "As a river bends.",
+        slain = "masc",
         skill_trees = {
 
             tab1ID = "MAM_TREE_K-J",

@@ -4,6 +4,8 @@ local TurnLogic = require("src.sys.turn_logic")
 local PreparationLogic = require("src.sys.preparation_logic")
 local SpawnerLogic = require("src.sys.spawner_logic")
 local BattleMap = require("src.sys.battle_map")
+local BlockLogic = require("src.sys.block_logic")
+local HealthLogic = require("src.sys.health_logic")
 
 local Controls = {}
 
@@ -22,6 +24,20 @@ local function isInside(x, y, bounds)
         and x <= bounds.x + bounds.width
         and y >= bounds.y
         and y <= bounds.y + bounds.height
+end
+
+local function getHoveredCombatEntity()
+    local mouseX, mouseY = love.mouse.getPosition()
+    local cell = BattleMap.getHexAt(mouseX, mouseY)
+    local entity = cell and SpawnerLogic.getEntityAt(cell)
+
+    if entity
+        and (
+            entity.entityType == "AGENT"
+            or entity.entityType == "HOSTILE"
+        ) then
+        return entity
+    end
 end
 
 function Controls.getExitPromptLayout()
@@ -75,6 +91,25 @@ function Controls.keypressed(key)
 
     if AgencyLogic.isModalOpen() then
         return true
+    end
+
+    -- Temporary developer controls for previewing the map status gauges.
+    if key == "d" then
+        local entity = getHoveredCombatEntity()
+
+        if entity then
+            HealthLogic.damage(entity, 1)
+            return true
+        end
+    end
+
+    if key == "b" then
+        local entity = getHoveredCombatEntity()
+
+        if entity then
+            BlockLogic.add(entity, 1)
+            return true
+        end
     end
 
     local consumed = FateLogic.keypressed(key)
@@ -143,14 +178,12 @@ function Controls.mousepressed(x, y, button)
     end
 
     if PreparationLogic.isActive() then
-        if PreparationLogic.mousepressed(
+        PreparationLogic.mousepressed(
             x,
             y,
             button,
             FateLogic.getButtonGroupBounds()
-        ) then
-            return true
-        end
+        )
 
         return true
     end
@@ -166,6 +199,10 @@ function Controls.mousepressed(x, y, button)
 
     if button == 2 then
         return agentDeselected
+    end
+
+    if TurnLogic.getPhaseState() ~= "queue" then
+        return false
     end
 
     return SpawnerLogic.mousepressed(x, y, button)

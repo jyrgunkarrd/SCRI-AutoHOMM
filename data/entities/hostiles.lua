@@ -31,13 +31,19 @@ local hostiles = {
             {tgh = 0},
             {lex = 0}, 
         },
-        actions_art = {
+        steel_atk = {
             
-            { cardid = "ATK", art = "MAM_ATK" },
-            { cardid = "DFN", art = "MAM_DFN" },
+            { rng = 1 },
         
         },
+        fire_atk = {
+
+            { rng = 3 },
+            { ammo = 2 },
+
+        },
         shout = "I proudly serve.",
+        slain = "masc",
     },
 
 }

@@ -14,9 +14,13 @@ local DIM_COLOR = { 0, 0, 0, 0.62 }
 local BUTTON_FILL_COLOR = { 0.055, 0.065, 0.085, 0.96 }
 local BUTTON_BORDER_COLOR = { 1, 1, 1, 1 }
 local BUTTON_TEXT_COLOR = { 1, 1, 1, 1 }
+local DRAG_THRESHOLD = 6
 
 local active = false
 local preparationTiles = {}
+local pressedAgent
+local pressX
+local pressY
 local draggedAgent
 
 local function isInside(x, y, bounds)
@@ -32,6 +36,9 @@ end
 
 function PreparationLogic.loadMap(map)
     preparationTiles = {}
+    pressedAgent = nil
+    pressX = nil
+    pressY = nil
     draggedAgent = nil
 
     for key, flagged in pairs(map and map.preparation_tiles or {}) do
@@ -89,6 +96,9 @@ function PreparationLogic.finish()
     end
 
     active = false
+    pressedAgent = nil
+    pressX = nil
+    pressY = nil
     draggedAgent = nil
     Sfx.play("prepared")
     TurnLogic.begin()
@@ -101,6 +111,11 @@ function PreparationLogic.mousepressed(x, y, button, fateButtonBounds)
         return false
     end
 
+    pressedAgent = nil
+    pressX = nil
+    pressY = nil
+    draggedAgent = nil
+
     local layout = PreparationLogic.getLayout(fateButtonBounds)
 
     if isInside(x, y, layout.finish) then
@@ -112,16 +127,37 @@ function PreparationLogic.mousepressed(x, y, button, fateButtonBounds)
     local entity = cell and SpawnerLogic.getEntityAt(cell)
 
     if entity and entity.entityType == "AGENT" then
-        draggedAgent = entity
+        pressedAgent = entity
+        pressX = x
+        pressY = y
         return true
+    elseif entity
+        and (
+            entity.entityType == "AGENT"
+            or entity.entityType == "HOSTILE"
+        ) then
+        return SpawnerLogic.select(entity)
     end
 
     return cell ~= nil
 end
 
 function PreparationLogic.mousemoved(x, y)
-    if not active or not draggedAgent then
+    if not active or not pressedAgent then
         return false
+    end
+
+    if not draggedAgent then
+        local deltaX = x - pressX
+        local deltaY = y - pressY
+
+        if deltaX * deltaX + deltaY * deltaY
+            < DRAG_THRESHOLD * DRAG_THRESHOLD then
+            return true
+        end
+
+        draggedAgent = pressedAgent
+        SpawnerLogic.deselect()
     end
 
     local cell = BattleMap.getHexAt(x, y)
@@ -140,11 +176,20 @@ function PreparationLogic.mousemoved(x, y)
 end
 
 function PreparationLogic.mousereleased(_, _, button)
-    if button ~= 1 or not draggedAgent then
+    if button ~= 1 or not pressedAgent then
         return false
     end
 
+    local clickedAgent = not draggedAgent and pressedAgent or nil
+
+    pressedAgent = nil
+    pressX = nil
+    pressY = nil
     draggedAgent = nil
+
+    if clickedAgent then
+        SpawnerLogic.select(clickedAgent)
+    end
 
     return true
 end

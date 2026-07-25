@@ -98,9 +98,12 @@ local SpawnerLogic = require("src.sys.spawner_logic")
 local FateLogic = require("src.sys.fate_logic")
 local AgencyLogic = require("src.sys.agency_logic")
 local TurnLogic = require("src.sys.turn_logic")
+local StartLogic = require("src.sys.start_logic")
+local HealthLogic = require("src.sys.health_logic")
 local PreparationLogic = require("src.sys.preparation_logic")
 local ReflexLogic = require("src.sys.reflex_logic")
 local MovementSpdLogic = require("src.sys.movement_spd_logic")
+local SteelCombat = require("src.sys.steel_combat")
 local Controls = require("src.input.controls")
 
 local DEFAULT_FONT_PATH = "assets/fonts/Furore.otf"
@@ -140,12 +143,24 @@ function love.load()
 
     ReflexLogic.reset()
     MovementSpdLogic.reset()
+    SteelCombat.reset()
+    HealthLogic.setDeathHandler(function(entity)
+        ReflexLogic.removeEntity(entity)
+        MovementSpdLogic.removeEntity(entity)
+        SteelCombat.removeEntity(entity)
+    end)
     TurnLogic.setResolutionHandler(function(phase, round)
-        if phase == "Reflex" then
+        SpawnerLogic.deselect()
+
+        if phase == "Start" then
+            return StartLogic.resolve(entities)
+        elseif phase == "Reflex" then
             return ReflexLogic.resolveRound(entities, round)
         elseif phase == "March" then
             MovementSpdLogic.beginMarch(entities, round)
             return true
+        elseif phase == "Steel" then
+            return SteelCombat.beginSteel(entities, round)
         end
 
         return true
@@ -155,8 +170,20 @@ function love.load()
             return not ReflexLogic.isAnimating()
         elseif phase == "March" then
             return not MovementSpdLogic.isProcessing()
+        elseif phase == "Steel" then
+            return not SteelCombat.isProcessing()
         end
 
+        return true
+    end)
+    TurnLogic.setCleanupHandler(function(phase)
+        if phase == "End" then
+            MovementSpdLogic.reset()
+            SteelCombat.reset()
+            return ReflexLogic.clearInitiativeSequence()
+        end
+
+        ReflexLogic.repopulateInitiativeSequence()
         return true
     end)
 
@@ -195,6 +222,7 @@ function love.draw()
     )
     FateLogic.draw()
     AgencyLogic.draw()
+    SteelCombat.draw()
     Controls.draw()
 end
 
@@ -202,6 +230,7 @@ function love.update(dt)
     SpawnerLogic.update(dt)
     ReflexLogic.update(dt)
     MovementSpdLogic.update(dt, SpawnerLogic.getEntities())
+    SteelCombat.update(dt)
 
     if not PreparationLogic.isActive() then
         TurnLogic.update(dt)

@@ -271,6 +271,14 @@ function SpawnerLogic.getSelectedAgent()
     return AgentLogic.getSelected()
 end
 
+function SpawnerLogic.select(entity)
+    return AgentLogic.select(entity)
+end
+
+function SpawnerLogic.deselect()
+    return AgentLogic.deselect()
+end
+
 function SpawnerLogic.getAgencyButtonBounds()
     return AgentLogic.getAgencyButtonBounds()
 end

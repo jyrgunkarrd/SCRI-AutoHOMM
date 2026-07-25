@@ -40,6 +40,7 @@ local autoEnabled = false
 local started = false
 local resolutionHandler
 local resolutionReadyCheck
+local cleanupHandler
 
 local function isInside(x, y, bounds)
     return x >= bounds.x
@@ -101,6 +102,7 @@ function TurnLogic.reset()
     started = false
     resolutionHandler = nil
     resolutionReadyCheck = nil
+    cleanupHandler = nil
 end
 
 function TurnLogic.begin()
@@ -134,6 +136,16 @@ function TurnLogic.setResolutionReadyCheck(check)
     end
 
     resolutionReadyCheck = check
+
+    return true
+end
+
+function TurnLogic.setCleanupHandler(handler)
+    if handler ~= nil and type(handler) ~= "function" then
+        return nil, "cleanup handler must be a function or nil"
+    end
+
+    cleanupHandler = handler
 
     return true
 end
@@ -256,6 +268,22 @@ function TurnLogic.update(dt)
         ) then
         phaseState = "cleanup"
         stateElapsed = 0
+
+        if cleanupHandler then
+            local handled, result, handlerError = pcall(
+                cleanupHandler,
+                PHASES[currentPhaseIndex],
+                round
+            )
+
+            if not handled then
+                error(result)
+            end
+
+            if result == nil then
+                error(handlerError or "phase cleanup handler failed")
+            end
+        end
     elseif phaseState == "cleanup"
         and stateElapsed >= CLEANUP_DURATION then
         TurnLogic.nextPhase()

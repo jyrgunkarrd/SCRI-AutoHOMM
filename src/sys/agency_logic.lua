@@ -327,10 +327,22 @@ local function getTileActions(definition)
     return actions
 end
 
-local function drawTile(tile, x, y, width)
-    love.graphics.setColor(COLORS.tile)
+local function drawTile(tile, x, y, width, opacity)
+    opacity = opacity or 1
+
+    love.graphics.setColor(
+        COLORS.tile[1],
+        COLORS.tile[2],
+        COLORS.tile[3],
+        COLORS.tile[4] * opacity
+    )
     love.graphics.rectangle("fill", x, y, width, TILE_HEIGHT, 4, 4)
-    love.graphics.setColor(COLORS.border)
+    love.graphics.setColor(
+        COLORS.border[1],
+        COLORS.border[2],
+        COLORS.border[3],
+        COLORS.border[4] * opacity
+    )
     love.graphics.setLineWidth(1)
     love.graphics.rectangle("line", x, y, width, TILE_HEIGHT, 4, 4)
 
@@ -373,7 +385,7 @@ local function drawTile(tile, x, y, width)
             local scale = ACTION_ICON_SIZE
                 / math.max(iconWidth, iconHeight)
 
-            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.setColor(1, 1, 1, opacity)
             love.graphics.draw(
                 group.action.icon,
                 drawX + ACTION_ICON_SIZE / 2,
@@ -387,7 +399,12 @@ local function drawTile(tile, x, y, width)
             drawX = drawX + ACTION_ICON_SIZE + ACTION_VALUE_GAP
         end
 
-        love.graphics.setColor(COLORS.text)
+        love.graphics.setColor(
+            COLORS.text[1],
+            COLORS.text[2],
+            COLORS.text[3],
+            COLORS.text[4] * opacity
+        )
         love.graphics.print(
             group.valueText,
             drawX,
@@ -559,6 +576,16 @@ function AgencyLogic.drawTile(stack, random)
         stack.tiles,
         getRandomIndex(#stack.tiles, random)
     )
+end
+
+function AgencyLogic.drawTileCard(tile, x, y, width, opacity)
+    if type(tile) ~= "table" or type(tile.definition) ~= "table" then
+        return nil, "a valid Agency tile is required"
+    end
+
+    drawTile(tile, x, y, width, opacity)
+
+    return TILE_HEIGHT
 end
 
 function AgencyLogic.discardTile(stack, tile)

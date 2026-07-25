@@ -3,9 +3,16 @@ local Sfx = {}
 local DEFINITIONS = {
     bonus_action = "assets/audio/sfx/bonus_action.wav",
     click = "assets/audio/sfx/click.wav",
+    crit_damage = "assets/audio/sfx/crit_damage.wav",
+    damage = "assets/audio/sfx/damage.wav",
+    march = "assets/audio/sfx/march.wav",
+    no_damage = "assets/audio/sfx/no_damage.wav",
     prepared = "assets/audio/sfx/prepared.wav",
     round_start = "assets/audio/sfx/round_start.wav",
     skip_turn = "assets/audio/sfx/skip_turn.wav",
+    slain_fem = "assets/audio/sfx/slain_fem.wav",
+    slain_masc = "assets/audio/sfx/slain_masc.wav",
+    steel_atk = "assets/audio/sfx/steel_atk.wav",
 }
 
 local sources = {}

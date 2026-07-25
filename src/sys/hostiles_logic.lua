@@ -1,5 +1,6 @@
 local ImageLoader = require("src.assets.image_loader")
 local AgentLogic = require("src.sys.agent_logic")
+local HealthLogic = require("src.sys.health_logic")
 
 local HostilesLogic = {}
 
@@ -73,7 +74,7 @@ function HostilesLogic.spawn(definition, anchorCell)
         )
     end
 
-    return {
+    local entity = {
         id = definition.id,
         entityType = "HOSTILE",
         hostile = true,
@@ -86,6 +87,14 @@ function HostilesLogic.spawn(definition, anchorCell)
         profileImage = profileImage,
         profileImagePath = profileImagePath,
     }
+
+    local healthy, healthError = HealthLogic.initialize(entity)
+
+    if not healthy then
+        return nil, healthError
+    end
+
+    return entity
 end
 
 function HostilesLogic.draw(entity)
