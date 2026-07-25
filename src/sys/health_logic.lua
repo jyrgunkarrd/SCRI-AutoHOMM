@@ -70,7 +70,7 @@ function HealthLogic.initialize(entity)
     entity.hp = maxHp
     entity.dead = false
 
-    local blocked, blockError = BlockLogic.initialize(entity, maxHp)
+    local blocked, blockError = BlockLogic.initialize(entity)
 
     if not blocked then
         return nil, blockError
@@ -88,6 +88,14 @@ function HealthLogic.getFraction(entity)
     end
 
     return clamp(entity.hp / entity.maxHp, 0, 1)
+end
+
+function HealthLogic.getGaugeColor(entity)
+    if entity and entity.dead then
+        return GAUGE_DEAD_COLOR
+    end
+
+    return getGaugeColor(HealthLogic.getFraction(entity))
 end
 
 function HealthLogic.setDeathHandler(handler)
@@ -165,7 +173,7 @@ function HealthLogic.drawGauge(entity, centerX, centerY, radius)
     )
 
     if fraction > 0 then
-        love.graphics.setColor(getGaugeColor(fraction))
+        love.graphics.setColor(HealthLogic.getGaugeColor(entity))
 
         if fraction >= 1 then
             love.graphics.circle(

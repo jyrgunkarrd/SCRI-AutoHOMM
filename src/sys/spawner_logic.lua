@@ -4,6 +4,7 @@ local JACLLogic = require("src.sys.JACL_logic")
 local AgentLogic = require("src.sys.agent_logic")
 local HostilesLogic = require("src.sys.hostiles_logic")
 local MapData = require("src.sys.map_data")
+local TerrainLogic = require("src.sys.terrain_logic")
 
 local SpawnerLogic = {}
 
@@ -188,7 +189,11 @@ function SpawnerLogic.moveEntity(entity, anchorCell, cellAllowed)
         return nil, footprintError
     end
 
+    local previouslyOccupied = {}
+
     for _, cell in ipairs(entity.footprint) do
+        previouslyOccupied[cell.key] = true
+
         if occupiedCells[cell.key] == entity then
             occupiedCells[cell.key] = nil
         end
@@ -201,7 +206,26 @@ function SpawnerLogic.moveEntity(entity, anchorCell, cellAllowed)
         occupiedCells[cell.key] = entity
     end
 
-    return true
+    local enteredCells = {}
+
+    for _, cell in ipairs(footprint) do
+        if not previouslyOccupied[cell.key] then
+            enteredCells[#enteredCells + 1] = cell
+        end
+    end
+
+    local terrainResult, terrainError = TerrainLogic.onEntityEntered(
+        entity,
+        enteredCells
+    )
+
+    if not terrainResult then
+        return nil, (
+            "unable to resolve terrain after moving %q: %s"
+        ):format(tostring(entity.id), tostring(terrainError))
+    end
+
+    return true, nil, terrainResult
 end
 
 function SpawnerLogic.moveAgent(entity, anchorCell, cellAllowed)

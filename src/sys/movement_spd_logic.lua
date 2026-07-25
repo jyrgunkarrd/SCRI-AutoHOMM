@@ -3,6 +3,7 @@ local MapPathfindingLogic = require("src.sys.map_pathfinding_logic")
 local ReflexLogic = require("src.sys.reflex_logic")
 local Sfx = require("src.sys.sfx")
 local SpawnerLogic = require("src.sys.spawner_logic")
+local TerrainLogic = require("src.sys.terrain_logic")
 
 local MovementSpdLogic = {}
 
@@ -114,7 +115,10 @@ local function getClosestOpponent(entity, entities)
 end
 
 local function canOccupy(entity, cell)
-    return SpawnerLogic.canEntityOccupy(entity, cell) ~= nil
+    local footprint = SpawnerLogic.canEntityOccupy(entity, cell)
+
+    return footprint ~= nil
+        and not TerrainLogic.footprintHasHazard(footprint)
 end
 
 local function selectDestination(entity, target, speed)

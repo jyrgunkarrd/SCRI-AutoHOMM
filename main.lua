@@ -104,6 +104,8 @@ local PreparationLogic = require("src.sys.preparation_logic")
 local ReflexLogic = require("src.sys.reflex_logic")
 local MovementSpdLogic = require("src.sys.movement_spd_logic")
 local SteelCombat = require("src.sys.steel_combat")
+local TerrainLogic = require("src.sys.terrain_logic")
+local GlanceTooltips = require("src.sys.glance_tooltips")
 local Controls = require("src.input.controls")
 
 local DEFAULT_FONT_PATH = "assets/fonts/Furore.otf"
@@ -222,6 +224,8 @@ function love.draw()
     )
     FateLogic.draw()
     AgencyLogic.draw()
+    TerrainLogic.drawTooltip()
+    GlanceTooltips.draw(SpawnerLogic.getEntities())
     SteelCombat.draw()
     Controls.draw()
 end

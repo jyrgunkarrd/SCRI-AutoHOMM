@@ -7,6 +7,7 @@ MapData.VERSION = 1
 MapData.PALETTE_SIZE = 10
 MapData.MAX_MAP_NAME_LENGTH = 64
 MapData.MAX_SPAWNER_TARGET_LENGTH = 128
+MapData.MAX_TERRAIN_FEATURE_LENGTH = 128
 
 local validCellKeys = {}
 
@@ -124,6 +125,32 @@ function MapData.validate(map)
         end
     end
 
+    if map.terrain_features ~= nil
+        and type(map.terrain_features) ~= "table" then
+        return nil, "map terrain_features must be a table"
+    end
+
+    for key, feature in pairs(map.terrain_features or {}) do
+        if not validCellKeys[key] then
+            return nil, (
+                "map contains a terrain feature on an unknown hex: "
+                    .. tostring(key)
+            )
+        end
+
+        if type(feature) ~= "string" or not feature:match("%S") then
+            return nil, (
+                "terrain feature for hex %s must be a non-empty string"
+            ):format(key)
+        end
+
+        if #feature > MapData.MAX_TERRAIN_FEATURE_LENGTH then
+            return nil, (
+                "terrain feature for hex %s is too long"
+            ):format(key)
+        end
+    end
+
     return true
 end
 
@@ -190,6 +217,18 @@ function MapData.isPreparationTile(map, cellOrKey)
     return (map.preparation_tiles or {})[key] == true
 end
 
+function MapData.getTerrainFeature(map, cellOrKey)
+    local valid, validationError = MapData.validate(map)
+
+    if not valid then
+        return nil, validationError
+    end
+
+    local key = type(cellOrKey) == "table" and cellOrKey.key or cellOrKey
+
+    return (map.terrain_features or {})[key]
+end
+
 function MapData.encode(map)
     local valid, validationError = MapData.validate(map)
 
@@ -247,6 +286,19 @@ function MapData.encode(map)
             lines[#lines + 1] = (
                 "        [%q] = true,"
             ):format(cell.key)
+        end
+    end
+
+    lines[#lines + 1] = "    },"
+    lines[#lines + 1] = "    terrain_features = {"
+
+    for _, cell in ipairs(BattleMap.getCells()) do
+        local feature = (map.terrain_features or {})[cell.key]
+
+        if feature then
+            lines[#lines + 1] = (
+                "        [%q] = %q,"
+            ):format(cell.key, feature)
         end
     end
 

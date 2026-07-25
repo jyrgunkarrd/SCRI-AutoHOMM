@@ -101,4 +101,8 @@ function HostilesLogic.draw(entity)
     AgentLogic.draw(entity)
 end
 
+function HostilesLogic.getGaugeDescriptors(entity)
+    return AgentLogic.getGaugeDescriptors(entity)
+end
+
 return HostilesLogic

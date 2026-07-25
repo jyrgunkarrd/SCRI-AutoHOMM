@@ -11,6 +11,7 @@ local FONT_PATH = "assets/fonts/Furore.otf"
 local PANEL_X = 16
 local PANEL_Y = 170
 local PANEL_WIDTH = 180
+local PANEL_HEIGHT = 580
 local BUTTON_HEIGHT = 34
 local SWATCH_SIZE = 48
 local SWATCH_GAP = 8
@@ -25,6 +26,16 @@ local SELECTED_COLOR = { 1, 1, 1, 1 }
 local SPAWNER_COLOR = { 0, 62 / 255, 202 / 255, 1 }
 local SPAWNER_OUTLINE_COLOR = { 1, 1, 1, 1 }
 local SPAWNER_SIZE = 34
+local TERRAIN_MARKER_COLOR = { 0, 0, 0, 1 }
+local TERRAIN_MARKER_RADIUS = BattleMap.HEX_RADIUS * 0.82
+local TERRAIN_MARKER_WIDTH = 3
+local TERRAIN_RECENT_LIMIT = 6
+local TERRAIN_RECENT_VISIBLE = 3
+local INFO_PANEL_MARGIN = 16
+local INFO_PANEL_WIDTH = 190
+local INFO_PANEL_PADDING = 12
+local INFO_FONT_MIN_SIZE = 10
+local INFO_FONT_MAX_SIZE = 16
 local NOTIFICATION_DURATION = 4
 local NOTIFICATION_FADE_DURATION = 1
 local EXIT_PANEL_WIDTH = 640
@@ -55,11 +66,19 @@ local state = {
     tiles = {},
     spawners = {},
     preparationTiles = {},
+    terrainFeatures = {},
+    terrainBrush = nil,
+    terrainMode = false,
+    recentTerrainFeatures = {},
+    infoFonts = {},
     spawnerInput = nil,
+    terrainInput = nil,
     wipFiles = {},
     wipIndex = 1,
     hoverCell = nil,
     painting = false,
+    terrainPainting = false,
+    terrainErasing = false,
     dirty = false,
     allowQuit = false,
     exitPromptOpen = false,
@@ -136,6 +155,8 @@ end
 
 local function requestExit()
     state.painting = false
+    state.terrainPainting = false
+    state.terrainErasing = false
 
     if state.dirty then
         state.exitPromptOpen = true
@@ -416,6 +437,120 @@ local function cancelSpawnerEdit()
     setTextInputEnabled(false)
 end
 
+local function addRecentTerrainFeature(feature)
+    for index = #state.recentTerrainFeatures, 1, -1 do
+        if state.recentTerrainFeatures[index] == feature then
+            table.remove(state.recentTerrainFeatures, index)
+        end
+    end
+
+    table.insert(state.recentTerrainFeatures, 1, feature)
+
+    while #state.recentTerrainFeatures > TERRAIN_RECENT_LIMIT do
+        table.remove(state.recentTerrainFeatures)
+    end
+end
+
+local function selectTerrainBrush(feature)
+    state.painting = false
+    state.terrainBrush = feature
+    state.terrainMode = true
+    addRecentTerrainFeature(feature)
+    setMessage(
+        ("Terrain brush: %q. Left-drag paints; right-drag erases."):format(
+            feature
+        )
+    )
+end
+
+local function pickUpHoveredTerrainFeature()
+    local cell = state.hoverCell
+    local feature = cell and state.terrainFeatures[cell.key]
+
+    if not feature then
+        setMessage("Hover a terrain feature before pressing Shift+T.")
+        return
+    end
+
+    selectTerrainBrush(feature)
+end
+
+local function leaveTerrainMode()
+    state.terrainMode = false
+    state.terrainPainting = false
+    state.terrainErasing = false
+    setMessage("Terrain painting mode ended.")
+end
+
+local function beginTerrainEdit()
+    local cell = state.hoverCell
+
+    if not cell then
+        setMessage("Hover a hex before pressing T.")
+        return
+    end
+
+    state.painting = false
+    state.terrainInput = {
+        cellKey = cell.key,
+        original = state.terrainFeatures[cell.key],
+        value = state.terrainFeatures[cell.key] or "",
+        suppressInitialT = true,
+    }
+    setMessage(
+        "Enter a terrain feature for "
+            .. cell.key
+            .. ". Leave it blank to remove the feature."
+    )
+    setTextInputEnabled(true)
+end
+
+local function finishTerrainEdit()
+    local input = state.terrainInput
+
+    if not input then
+        return
+    end
+
+    local feature = trim(input.value)
+
+    if feature == "" then
+        if input.original then
+            state.terrainFeatures[input.cellKey] = nil
+            markDirty()
+            setMessage("Removed terrain feature from " .. input.cellKey)
+        else
+            setMessage("No terrain feature added to " .. input.cellKey)
+        end
+    else
+        if input.original ~= feature then
+            state.terrainFeatures[input.cellKey] = feature
+            markDirty()
+        end
+
+        selectTerrainBrush(feature)
+        setMessage(
+            (
+                "Terrain feature %s is %q. "
+                    .. "Left-drag to paint; right-drag to erase."
+            ):format(input.cellKey, feature)
+        )
+    end
+
+    state.terrainInput = nil
+    setTextInputEnabled(false)
+end
+
+local function cancelTerrainEdit()
+    if not state.terrainInput then
+        return
+    end
+
+    state.terrainInput = nil
+    setMessage("Terrain feature edit cancelled.")
+    setTextInputEnabled(false)
+end
+
 local function removeHoveredSpawner()
     local cell = state.hoverCell
 
@@ -591,6 +726,22 @@ local function loadSelectedWip()
         end
     end
 
+    state.terrainFeatures = {}
+    state.terrainBrush = nil
+    state.terrainMode = false
+    state.terrainPainting = false
+    state.terrainErasing = false
+    state.recentTerrainFeatures = {}
+
+    for _, cell in ipairs(BattleMap.getCells()) do
+        local feature = (map.terrain_features or {})[cell.key]
+
+        if feature then
+            state.terrainFeatures[cell.key] = feature
+            addRecentTerrainFeature(feature)
+        end
+    end
+
     state.mapName = map.name or getBaseName(fileName)
     state.dirty = false
     setMessage("Loaded " .. fileName)
@@ -602,6 +753,7 @@ local function buildMapData()
     local tiles = {}
     local spawners = {}
     local preparationTiles = {}
+    local terrainFeatures = {}
 
     for index, color in ipairs(palette.colors) do
         colors[index] = copyColor(color)
@@ -617,6 +769,10 @@ local function buildMapData()
         if state.preparationTiles[cell.key] then
             preparationTiles[cell.key] = true
         end
+
+        if state.terrainFeatures[cell.key] then
+            terrainFeatures[cell.key] = state.terrainFeatures[cell.key]
+        end
     end
 
     return {
@@ -630,6 +786,7 @@ local function buildMapData()
         tiles = tiles,
         spawners = spawners,
         preparation_tiles = preparationTiles,
+        terrain_features = terrainFeatures,
     }
 end
 
@@ -740,6 +897,42 @@ local function drawPreparationTiles()
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+local function drawTerrainFeatures()
+    love.graphics.setColor(TERRAIN_MARKER_COLOR)
+    love.graphics.setLineWidth(TERRAIN_MARKER_WIDTH)
+
+    for _, cell in ipairs(BattleMap.getCells()) do
+        local hasFeature = state.terrainFeatures[cell.key] ~= nil
+            or state.terrainInput
+                and state.terrainInput.cellKey == cell.key
+
+        if hasFeature then
+            love.graphics.circle(
+                "line",
+                cell.x,
+                cell.y,
+                TERRAIN_MARKER_RADIUS,
+                64
+            )
+        end
+    end
+
+    if state.terrainMode and state.hoverCell then
+        love.graphics.setColor(0, 0, 0, 0.52)
+        love.graphics.setLineWidth(2)
+        love.graphics.circle(
+            "line",
+            state.hoverCell.x,
+            state.hoverCell.y,
+            TERRAIN_MARKER_RADIUS,
+            64
+        )
+    end
+
+    love.graphics.setLineWidth(1)
+    love.graphics.setColor(1, 1, 1, 1)
+end
+
 local function drawSpawnerInput()
     local input = state.spawnerInput
 
@@ -759,6 +952,38 @@ local function drawSpawnerInput()
     love.graphics.rectangle("line", left, top, width, height, 6, 6)
     love.graphics.print("SPAWNER TARGET — Enter to save, Esc to cancel", left + 16, top + 12)
     love.graphics.setColor(TEXT_COLOR)
+    love.graphics.printf(
+        input.value .. "_",
+        left + 16,
+        top + 48,
+        width - 32,
+        "left"
+    )
+end
+
+local function drawTerrainInput()
+    local input = state.terrainInput
+
+    if not input then
+        return
+    end
+
+    local width = 760
+    local height = 96
+    local left = (love.graphics.getWidth() - width) / 2
+    local top = 22
+
+    love.graphics.setColor(PANEL_COLOR)
+    love.graphics.rectangle("fill", left, top, width, height, 6, 6)
+    love.graphics.setColor(TERRAIN_MARKER_COLOR)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", left, top, width, height, 6, 6)
+    love.graphics.setColor(TEXT_COLOR)
+    love.graphics.print(
+        "TERRAIN FEATURE — Enter to save/remove, Esc to cancel",
+        left + 16,
+        top + 12
+    )
     love.graphics.printf(
         input.value .. "_",
         left + 16,
@@ -796,11 +1021,285 @@ local function drawMapNameInput()
     )
 end
 
+local INFO_CONTROLS = table.concat({
+    "[ / ]  Previous / next palette",
+    ", / .  Previous / next WIP map",
+    "L  Load selected WIP map",
+    "E  Export current map",
+    "1–0  Select palette color",
+    "M  Rename map",
+    "S  Add / edit spawner",
+    "Delete  Remove hovered spawner",
+    "P  Toggle Preparation tile",
+    "T  Add / edit terrain",
+    "Shift+T  Pick up terrain string",
+    "R  Reset tile colors",
+    "O  Rescan palettes and maps",
+}, "\n")
+
+local function getInfoFont(size)
+    if not state.infoFonts[size] then
+        state.infoFonts[size] = love.graphics.newFont(FONT_PATH, size)
+    end
+
+    return state.infoFonts[size]
+end
+
+local function getWrappedTextHeight(font, text, width)
+    local _, lines = font:getWrap(text, width)
+
+    return math.max(1, #lines) * font:getHeight()
+end
+
+local function getHoveredInfo()
+    if not state.hoverCell then
+        return nil
+    end
+
+    local details = {}
+    local key = state.hoverCell.key
+
+    if state.spawners[key] then
+        details[#details + 1] = "Spawner: " .. state.spawners[key]
+    end
+
+    if state.terrainFeatures[key] then
+        details[#details + 1] =
+            "Terrain: " .. state.terrainFeatures[key]
+    end
+
+    if #details == 0 then
+        return nil
+    end
+
+    return table.concat(details, "\n")
+end
+
+local function buildInfoItems(font, contentWidth)
+    local items = {}
+    local cursor = 0
+    local lineHeight = font:getHeight()
+
+    local function addGap(height)
+        cursor = cursor + height
+    end
+
+    local function addText(kind, text, gap)
+        addGap(gap or 0)
+
+        local height = getWrappedTextHeight(font, text, contentWidth)
+        items[#items + 1] = {
+            kind = kind,
+            text = text,
+            offsetY = cursor,
+            height = height,
+        }
+        cursor = cursor + height
+    end
+
+    addText("title", "EDITOR GUIDE")
+    addText("heading", "CONTROLS", lineHeight)
+    addText("body", INFO_CONTROLS, math.max(4, lineHeight * 0.35))
+
+    local hoveredInfo = getHoveredInfo()
+
+    if hoveredInfo then
+        addText("heading", "HOVERED HEX", lineHeight)
+        addText("detail", hoveredInfo, math.max(4, lineHeight * 0.35))
+    end
+
+    addText("heading", "TERRAIN BRUSH", lineHeight)
+    addText(
+        state.terrainMode and "active" or "body",
+        (state.terrainMode and "Active: " or "Selected: ")
+            .. (state.terrainBrush or "(none)"),
+        math.max(4, lineHeight * 0.35)
+    )
+    addText(
+        "body",
+        state.terrainMode
+            and "Left-drag paints · Right-drag erases · Esc ends terrain mode"
+            or "Save, pick up, or select a recent string to begin painting.",
+        math.max(4, lineHeight * 0.35)
+    )
+    addText("heading", "RECENT TERRAIN", lineHeight)
+
+    local recentCount = math.min(
+        TERRAIN_RECENT_VISIBLE,
+        #state.recentTerrainFeatures
+    )
+
+    if recentCount == 0 then
+        addText("body", "(none yet)", math.max(4, lineHeight * 0.35))
+    else
+        addGap(math.max(4, lineHeight * 0.35))
+
+        for index = 1, recentCount do
+            local height = lineHeight + 10
+
+            items[#items + 1] = {
+                kind = "recent",
+                feature = state.recentTerrainFeatures[index],
+                offsetY = cursor,
+                height = height,
+            }
+            cursor = cursor + height + 4
+        end
+
+        cursor = cursor - 4
+    end
+
+    return items, cursor
+end
+
+local function getInfoPanelLayout()
+    local screenWidth = love.graphics.getWidth()
+    local screenHeight = love.graphics.getHeight()
+    local width = math.min(
+        INFO_PANEL_WIDTH,
+        screenWidth - INFO_PANEL_MARGIN * 2
+    )
+    local panel = {
+        x = screenWidth - width - INFO_PANEL_MARGIN,
+        y = INFO_PANEL_MARGIN,
+        width = width,
+        height = screenHeight - INFO_PANEL_MARGIN * 2,
+    }
+    local contentWidth = panel.width - INFO_PANEL_PADDING * 2
+    local selectedFont
+    local selectedItems
+    local selectedHeight
+
+    for size = INFO_FONT_MAX_SIZE, INFO_FONT_MIN_SIZE, -1 do
+        local font = getInfoFont(size)
+        local items, height = buildInfoItems(font, contentWidth)
+
+        selectedFont = font
+        selectedItems = items
+        selectedHeight = height
+
+        if height <= panel.height - INFO_PANEL_PADDING * 2 then
+            break
+        end
+    end
+
+    local contentTop = panel.y + INFO_PANEL_PADDING
+    local recentButtons = {}
+
+    for _, item in ipairs(selectedItems) do
+        item.x = panel.x + INFO_PANEL_PADDING
+        item.y = contentTop + item.offsetY
+        item.width = contentWidth
+
+        if item.kind == "recent" then
+            recentButtons[#recentButtons + 1] = item
+        end
+    end
+
+    return {
+        panel = panel,
+        font = selectedFont,
+        items = selectedItems,
+        contentHeight = selectedHeight,
+        recentButtons = recentButtons,
+    }
+end
+
+local function drawInfoPanel()
+    local layout = getInfoPanelLayout()
+    local panel = layout.panel
+    local previousFont = love.graphics.getFont()
+
+    love.graphics.setColor(PANEL_COLOR)
+    love.graphics.rectangle(
+        "fill",
+        panel.x,
+        panel.y,
+        panel.width,
+        panel.height,
+        6,
+        6
+    )
+    love.graphics.setFont(layout.font)
+    love.graphics.setScissor(
+        panel.x,
+        panel.y,
+        panel.width,
+        panel.height
+    )
+
+    for _, item in ipairs(layout.items) do
+        if item.kind == "recent" then
+            local active = state.terrainMode
+                and state.terrainBrush == item.feature
+
+            love.graphics.setColor(
+                active and { 0.22, 0.34, 0.22, 1 }
+                    or { 0.1, 0.12, 0.16, 1 }
+            )
+            love.graphics.rectangle(
+                "fill",
+                item.x,
+                item.y,
+                item.width,
+                item.height,
+                3,
+                3
+            )
+            love.graphics.setColor(
+                active and TEXT_COLOR or MUTED_TEXT_COLOR
+            )
+            love.graphics.setScissor(
+                item.x + 5,
+                item.y,
+                item.width - 10,
+                item.height
+            )
+            love.graphics.print(item.feature, item.x + 5, item.y + 5)
+            love.graphics.setScissor(
+                panel.x,
+                panel.y,
+                panel.width,
+                panel.height
+            )
+        else
+            if item.kind == "title" or item.kind == "heading" then
+                love.graphics.setColor(TEXT_COLOR)
+            elseif item.kind == "active" then
+                love.graphics.setColor(0.62, 0.82, 0.48, 1)
+            elseif item.kind == "detail" then
+                love.graphics.setColor(SPAWNER_OUTLINE_COLOR)
+            else
+                love.graphics.setColor(MUTED_TEXT_COLOR)
+            end
+
+            love.graphics.printf(
+                item.text,
+                item.x,
+                item.y,
+                item.width,
+                "left"
+            )
+        end
+    end
+
+    love.graphics.setScissor()
+    love.graphics.setFont(previousFont)
+end
+
 local function drawPanel()
     local palette = getCurrentPalette()
 
     love.graphics.setColor(PANEL_COLOR)
-    love.graphics.rectangle("fill", PANEL_X, PANEL_Y, PANEL_WIDTH, 880, 6, 6)
+    love.graphics.rectangle(
+        "fill",
+        PANEL_X,
+        PANEL_Y,
+        PANEL_WIDTH,
+        PANEL_HEIGHT,
+        6,
+        6
+    )
 
     love.graphics.setColor(TEXT_COLOR)
     love.graphics.print("MAP EDITOR", PANEL_X + 10, PANEL_Y + 12)
@@ -848,26 +1347,6 @@ local function drawPanel()
     drawButton("LOAD", PANEL_X + 64, wipY + 65, 62, #state.wipFiles > 0)
     drawButton(">", PANEL_X + 132, wipY + 65, 38, #state.wipFiles > 1)
     drawButton("EXPORT", PANEL_X + 10, wipY + 109, 160, true)
-
-    love.graphics.setColor(MUTED_TEXT_COLOR)
-    love.graphics.printf(
-        "[ / ] palette\n, / . WIP map\nL load  E export\n1-0 choose color\nM rename map\nS add/edit spawner\nP toggle Preparation\nDel remove spawner\nR reset  O rescan",
-        PANEL_X + 10,
-        wipY + 160,
-        PANEL_WIDTH - 20,
-        "left"
-    )
-
-    if state.hoverCell and state.spawners[state.hoverCell.key] then
-        love.graphics.setColor(SPAWNER_OUTLINE_COLOR)
-        love.graphics.printf(
-            "Target:\n" .. state.spawners[state.hoverCell.key],
-            PANEL_X + 10,
-            wipY + 380,
-            PANEL_WIDTH - 20,
-            "left"
-        )
-    end
 end
 
 local function drawNotification()
@@ -1001,6 +1480,26 @@ local function paintAt(x, y)
     end
 end
 
+local function paintTerrainAt(x, y)
+    local cell = BattleMap.getHexAt(x, y)
+
+    if cell
+        and state.terrainBrush
+        and state.terrainFeatures[cell.key] ~= state.terrainBrush then
+        state.terrainFeatures[cell.key] = state.terrainBrush
+        markDirty()
+    end
+end
+
+local function eraseTerrainAt(x, y)
+    local cell = BattleMap.getHexAt(x, y)
+
+    if cell and state.terrainFeatures[cell.key] then
+        state.terrainFeatures[cell.key] = nil
+        markDirty()
+    end
+end
+
 local function handlePanelClick(x, y)
     if isInside(x, y, PANEL_X + 10, PANEL_Y + 76, 72, BUTTON_HEIGHT) then
         changePalette(-1)
@@ -1039,7 +1538,37 @@ local function handlePanelClick(x, y)
         return true
     end
 
-    return isInside(x, y, PANEL_X, PANEL_Y, PANEL_WIDTH, 880)
+    local infoLayout = getInfoPanelLayout()
+
+    for _, button in ipairs(infoLayout.recentButtons) do
+        if isInside(
+            x,
+            y,
+            button.x,
+            button.y,
+            button.width,
+            button.height
+        ) then
+            selectTerrainBrush(button.feature)
+            return true
+        end
+    end
+
+    return isInside(
+        x,
+        y,
+        PANEL_X,
+        PANEL_Y,
+        PANEL_WIDTH,
+        PANEL_HEIGHT
+    ) or isInside(
+        x,
+        y,
+        infoLayout.panel.x,
+        infoLayout.panel.y,
+        infoLayout.panel.width,
+        infoLayout.panel.height
+    )
 end
 
 function editor.load()
@@ -1056,7 +1585,16 @@ function editor.load()
     state.mapNameInput = nil
     state.spawners = {}
     state.preparationTiles = {}
+    state.terrainFeatures = {}
+    state.terrainBrush = nil
+    state.terrainMode = false
+    state.recentTerrainFeatures = {}
+    state.infoFonts = {}
     state.spawnerInput = nil
+    state.terrainInput = nil
+    state.painting = false
+    state.terrainPainting = false
+    state.terrainErasing = false
     state.dirty = false
     state.allowQuit = false
     state.exitPromptOpen = false
@@ -1074,6 +1612,7 @@ function editor.draw()
         BACKGROUND_COLOR[4]
     )
     BattleMap.draw(getColorMap())
+    drawTerrainFeatures()
     drawPreparationTiles()
     drawSpawners()
 
@@ -1082,7 +1621,9 @@ function editor.draw()
     end
 
     drawPanel()
+    drawInfoPanel()
     drawSpawnerInput()
+    drawTerrainInput()
     drawMapNameInput()
     drawNotification()
     drawUnsavedExitPrompt()
@@ -1098,6 +1639,20 @@ function editor.keypressed(key)
         elseif key == "backspace" then
             state.spawnerInput.value = removeLastUtf8Character(
                 state.spawnerInput.value
+            )
+        end
+
+        return
+    end
+
+    if state.terrainInput then
+        if key == "return" or key == "kpenter" then
+            finishTerrainEdit()
+        elseif key == "escape" then
+            cancelTerrainEdit()
+        elseif key == "backspace" then
+            state.terrainInput.value = removeLastUtf8Character(
+                state.terrainInput.value
             )
         end
 
@@ -1127,11 +1682,21 @@ function editor.keypressed(key)
     end
 
     if key == "escape" then
-        requestExit()
+        if state.terrainMode then
+            leaveTerrainMode()
+        else
+            requestExit()
+        end
     elseif key == "m" then
         beginMapNameEdit()
     elseif key == "s" then
         beginSpawnerEdit()
+    elseif key == "t" then
+        if love.keyboard.isDown("lshift", "rshift") then
+            pickUpHoveredTerrainFeature()
+        else
+            beginTerrainEdit()
+        end
     elseif key == "p" then
         toggleHoveredPreparationTile()
     elseif key == "delete" then
@@ -1184,6 +1749,29 @@ function editor.textinput(text)
             setMessage((
                 "Spawner targets are limited to %d bytes."
             ):format(MapData.MAX_SPAWNER_TARGET_LENGTH))
+        end
+
+        return
+    end
+
+    local terrainInput = state.terrainInput
+
+    if terrainInput then
+        if terrainInput.suppressInitialT then
+            terrainInput.suppressInitialT = false
+
+            if text:lower() == "t" then
+                return
+            end
+        end
+
+        if #terrainInput.value + #text
+            <= MapData.MAX_TERRAIN_FEATURE_LENGTH then
+            terrainInput.value = terrainInput.value .. text
+        else
+            setMessage((
+                "Terrain features are limited to %d bytes."
+            ):format(MapData.MAX_TERRAIN_FEATURE_LENGTH))
         end
 
         return
@@ -1248,28 +1836,51 @@ function editor.mousepressed(x, y, button)
         return
     end
 
-    if button ~= 1 or state.spawnerInput or state.mapNameInput then
+    if state.spawnerInput
+        or state.terrainInput
+        or state.mapNameInput then
         return
     end
 
-    if handlePanelClick(x, y) then
+    if button == 1 and handlePanelClick(x, y) then
         return
     end
 
-    state.painting = true
-    paintAt(x, y)
+    if state.terrainMode then
+        if button == 1 then
+            state.terrainPainting = true
+            paintTerrainAt(x, y)
+        elseif button == 2 then
+            state.terrainErasing = true
+            eraseTerrainAt(x, y)
+        end
+
+        return
+    end
+
+    if button == 1 then
+        state.painting = true
+        paintAt(x, y)
+    end
 end
 
 function editor.mousereleased(_, _, button)
     if button == 1 then
         state.painting = false
+        state.terrainPainting = false
+    elseif button == 2 then
+        state.terrainErasing = false
     end
 end
 
 function editor.mousemoved(x, y)
     state.hoverCell = BattleMap.getHexAt(x, y)
 
-    if state.painting then
+    if state.terrainPainting then
+        paintTerrainAt(x, y)
+    elseif state.terrainErasing then
+        eraseTerrainAt(x, y)
+    elseif state.painting then
         paintAt(x, y)
     end
 end

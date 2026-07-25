@@ -1,4 +1,5 @@
 local ImageLoader = require("src.assets.image_loader")
+local TerrainLogic = require("src.sys.terrain_logic")
 local BattleMap = require("src.sys.battle_map")
 local BlockLogic = require("src.sys.block_logic")
 local HealthLogic = require("src.sys.health_logic")
@@ -421,6 +422,57 @@ local function getPulseScale(entity)
     return 1 + math.sin(pulseTime * PULSE_SPEED) * PULSE_AMOUNT
 end
 
+function AgentLogic.getGaugeDescriptors(entity)
+    if type(entity) ~= "table"
+        or type(entity.definition) ~= "table" then
+        return {}
+    end
+
+    local diameterScale =
+        PORTRAIT_DIAMETER_IN_HEX_RADII[entity.definition.size]
+
+    if not diameterScale then
+        return {}
+    end
+
+    local diameter = BattleMap.HEX_RADIUS * diameterScale
+    local pulseScale = getPulseScale(entity)
+        * (entity.initiativeEffectScale or 1)
+    local centerX = entity.movementVisualX or entity.anchor.x
+    local centerY = entity.movementVisualY or entity.anchor.y
+    local outlineRadius = (
+        diameter / 2 - PORTRAIT_OUTLINE_WIDTH / 2
+    ) * pulseScale
+    local blockGaugeVertexRadius = outlineRadius
+        - BLOCK_GAUGE_VERTEX_INSET
+
+    return {
+        {
+            id = "health",
+            x = centerX,
+            y = centerY
+                + outlineRadius
+                - HEALTH_GAUGE_BOTTOM_INSET,
+            radius = HEALTH_GAUGE_RADIUS,
+            current = entity.hp,
+            maximum = entity.maxHp,
+            color = HealthLogic.getGaugeColor(entity),
+            visible = true,
+        },
+        {
+            id = "block",
+            x = centerX
+                - math.sqrt(3) / 2 * blockGaugeVertexRadius,
+            y = centerY + blockGaugeVertexRadius / 2,
+            radius = BLOCK_GAUGE_RADIUS,
+            current = entity.block,
+            color = BlockLogic.getGaugeColor(entity),
+            visible = type(entity.block) == "number"
+                and entity.block > 0,
+        },
+    }
+end
+
 local function getSpeed(definition)
     for _, statEntry in ipairs(definition.stats or {}) do
         if type(statEntry.spd) == "number" then
@@ -438,6 +490,15 @@ local function refreshMovementRange(entity)
         speed,
         {
             includeStart = false,
+            isBlocked = function(cell)
+                local footprint = AgentLogic.getFootprint(
+                    entity.definition,
+                    cell
+                )
+
+                return not footprint
+                    or TerrainLogic.footprintHasHazard(footprint)
+            end,
         }
     )
 
@@ -912,21 +973,21 @@ function AgentLogic.draw(entity)
         buildHexPoints(centerX, centerY, outlineRadius)
     )
 
+    local gauges = AgentLogic.getGaugeDescriptors(entity)
+    local healthGauge = gauges[1]
+    local blockGauge = gauges[2]
+
     HealthLogic.drawGauge(
         entity,
-        centerX,
-        centerY + outlineRadius - HEALTH_GAUGE_BOTTOM_INSET,
-        HEALTH_GAUGE_RADIUS
+        healthGauge.x,
+        healthGauge.y,
+        healthGauge.radius
     )
-
-    local blockGaugeVertexRadius = outlineRadius
-        - BLOCK_GAUGE_VERTEX_INSET
-
     BlockLogic.drawGauge(
         entity,
-        centerX - math.sqrt(3) / 2 * blockGaugeVertexRadius,
-        centerY + blockGaugeVertexRadius / 2,
-        BLOCK_GAUGE_RADIUS
+        blockGauge.x,
+        blockGauge.y,
+        blockGauge.radius
     )
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setLineWidth(1)

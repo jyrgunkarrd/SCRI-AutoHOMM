@@ -1,4 +1,5 @@
 local MapData = require("src.sys.map_data")
+local TerrainLogic = require("src.sys.terrain_logic")
 
 local GameMap = {}
 
@@ -65,6 +66,14 @@ function GameMap.loadFromDefinition(definition)
         return nil, ("unable to prepare %s: %s"):format(path, tostring(colorError))
     end
 
+    local terrain, terrainError = TerrainLogic.loadMap(map)
+
+    if not terrain then
+        return nil, (
+            "unable to prepare terrain for %s: %s"
+        ):format(path, tostring(terrainError))
+    end
+
     activeMap = map
     activeColorMap = colorMap
     activePath = path
@@ -102,6 +111,14 @@ function GameMap.isPreparationTile(cellOrKey)
     end
 
     return MapData.isPreparationTile(activeMap, cellOrKey)
+end
+
+function GameMap.getTerrain(cellOrKey)
+    if not activeMap then
+        return nil, "no map is loaded"
+    end
+
+    return TerrainLogic.get(cellOrKey)
 end
 
 return GameMap

@@ -10,21 +10,13 @@ local function clamp(value, minimum, maximum)
     return math.max(minimum, math.min(maximum, value))
 end
 
-function BlockLogic.initialize(entity, maxBlock)
+function BlockLogic.initialize(entity)
     if type(entity) ~= "table" then
         return nil, "block requires an entity"
     end
 
-    if type(maxBlock) ~= "number"
-        or maxBlock ~= maxBlock
-        or maxBlock == math.huge
-        or maxBlock == -math.huge
-        or maxBlock <= 0 then
-        return nil, "maximum block must be a positive number"
-    end
-
-    entity.maxBlock = maxBlock
     entity.block = 0
+    entity.blockGaugePeak = 0
 
     return entity
 end
@@ -32,33 +24,60 @@ end
 function BlockLogic.getFraction(entity)
     if type(entity) ~= "table"
         or type(entity.block) ~= "number"
-        or type(entity.maxBlock) ~= "number"
-        or entity.maxBlock <= 0 then
+        or entity.block <= 0
+        or type(entity.blockGaugePeak) ~= "number"
+        or entity.blockGaugePeak <= 0 then
         return 0
     end
 
-    return clamp(entity.block / entity.maxBlock, 0, 1)
+    return clamp(entity.block / entity.blockGaugePeak, 0, 1)
+end
+
+function BlockLogic.getGaugePeak(entity)
+    if type(entity) ~= "table"
+        or type(entity.blockGaugePeak) ~= "number" then
+        return 0
+    end
+
+    return math.max(0, entity.blockGaugePeak)
+end
+
+function BlockLogic.getGaugeColor()
+    return GAUGE_BLOCK_COLOR
 end
 
 function BlockLogic.setBlock(entity, block)
     if type(entity) ~= "table"
-        or type(entity.maxBlock) ~= "number"
-        or entity.maxBlock <= 0 then
+        or type(entity.block) ~= "number"
+        or type(entity.blockGaugePeak) ~= "number" then
         return nil, "entity block has not been initialized"
     end
 
-    if type(block) ~= "number" or block ~= block then
-        return nil, "block must be a number"
+    if type(block) ~= "number"
+        or block ~= block
+        or block == math.huge
+        or block == -math.huge then
+        return nil, "block must be a finite number"
     end
 
     entity.block = math.max(0, block)
+
+    if entity.block <= 0 then
+        entity.block = 0
+        entity.blockGaugePeak = 0
+    elseif entity.block > entity.blockGaugePeak then
+        entity.blockGaugePeak = entity.block
+    end
 
     return entity.block
 end
 
 function BlockLogic.add(entity, amount)
-    if type(amount) ~= "number" or amount < 0 or amount ~= amount then
-        return nil, "block gain must be a non-negative number"
+    if type(amount) ~= "number"
+        or amount < 0
+        or amount ~= amount
+        or amount == math.huge then
+        return nil, "block gain must be a finite non-negative number"
     end
 
     return BlockLogic.setBlock(

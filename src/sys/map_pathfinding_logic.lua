@@ -1,4 +1,5 @@
 local BattleMap = require("src.sys.battle_map")
+local TerrainLogic = require("src.sys.terrain_logic")
 
 local MapPathfindingLogic = {}
 
@@ -8,6 +9,7 @@ local MapPathfindingLogic = {}
 --   blocked            Array or key-set of impassable cells.
 --   isBlocked(cell)    Dynamic occupancy callback.
 --   allowBlockedGoal   Permits the final cell even when blocked.
+--   allowHazards       Permits paths through hazard terrain. False by default.
 --   getCost(from, to)  Positive traversal-cost callback.
 --   heuristic(cell, goal)
 --                      Optional finite, non-negative A* heuristic.
@@ -19,8 +21,8 @@ local MapPathfindingLogic = {}
 -- Success returns path, totalCost. Failure returns nil, errorMessage.
 --
 -- getReachableCells(start, movementPoints, options) supports blocked,
--- isBlocked, getCost, includeStart, and maxIterations. It returns an ordered
--- cell array plus a key-to-cost table.
+-- isBlocked, allowHazards, getCost, includeStart, and maxIterations. It
+-- returns an ordered cell array plus a key-to-cost table.
 
 local function resolveCell(cellOrKey)
     if type(cellOrKey) == "table" then
@@ -259,6 +261,10 @@ function MapPathfindingLogic.findPath(startCellOrKey, goalCellOrKey, options)
             return false
         end
 
+        if not options.allowHazards and TerrainLogic.isHazardCell(cell) then
+            return true
+        end
+
         if cell == goal and options.allowBlockedGoal then
             return false
         end
@@ -421,6 +427,10 @@ function MapPathfindingLogic.getReachableCells(
     local function isBlocked(cell)
         if cell == start then
             return false
+        end
+
+        if not options.allowHazards and TerrainLogic.isHazardCell(cell) then
+            return true
         end
 
         if blockedByKey[cell.key] then
