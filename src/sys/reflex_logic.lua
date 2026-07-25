@@ -1,6 +1,7 @@
 local AgencyLogic = require("src.sys.agency_logic")
 local BattleMap = require("src.sys.battle_map")
 local BlockLogic = require("src.sys.block_logic")
+local ConditionLogic = require("src.sys.condition_logic")
 local FateLogic = require("src.sys.fate_logic")
 local Sfx = require("src.sys.sfx")
 
@@ -247,6 +248,21 @@ local function getFateModifier(tile)
 end
 
 local function resolveEntity(entity, random, exceptionalEvents)
+    local consumedStun = ConditionLogic.consume(entity, "NEG_STUN")
+
+    if consumedStun then
+        entity.exhausted = true
+        entity.initiativeFateTiles = {}
+        entity.initiativeAgencyTile = nil
+        entity.initiativeExhaustionPending = true
+        exceptionalEvents[#exceptionalEvents + 1] = {
+            kind = "stun",
+            entity = entity,
+            condition = consumedStun,
+        }
+        return {}
+    end
+
     local fateStack = getFateStack(entity)
 
     if not fateStack then
@@ -730,7 +746,8 @@ function ReflexLogic.update(dt)
 
             clearEntityEffect(completed.entity)
 
-            if completed.kind == "fail" then
+            if completed.kind == "fail"
+                or completed.kind == "stun" then
                 completed.entity.initiativeExhaustionPending = nil
             end
 

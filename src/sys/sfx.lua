@@ -5,6 +5,7 @@ local DEFINITIONS = {
     click = "assets/audio/sfx/click.wav",
     crit_damage = "assets/audio/sfx/crit_damage.wav",
     damage = "assets/audio/sfx/damage.wav",
+    fire_atk = "assets/audio/sfx/fire_atk.wav",
     march = "assets/audio/sfx/march.wav",
     no_damage = "assets/audio/sfx/no_damage.wav",
     prepared = "assets/audio/sfx/prepared.wav",

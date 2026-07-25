@@ -272,9 +272,9 @@ return {
     },
     spawners = {
         ["1:1"] = "JACL_VAL",
-        ["9:1"] = "AGENT_MAM",
-        ["9:16"] = "HOSTILE_FORG",
-        ["9:18"] = "HOSTILE_FORG",
+        ["5:2"] = "AGENT_MAM",
+        ["5:17"] = "HOSTILE_FORG",
+        ["5:18"] = "HOSTILE_FORG",
     },
     preparation_tiles = {
         ["4:0"] = true,

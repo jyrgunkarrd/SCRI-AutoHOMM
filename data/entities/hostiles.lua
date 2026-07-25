@@ -38,10 +38,11 @@ local hostiles = {
         },
         fire_atk = {
 
+            { min_rng = 0},
             { rng = 3 },
-            { ammo = 2 },
 
         },
+        ammo = 2,
         shout = "I proudly serve.",
         slain = "masc",
     },

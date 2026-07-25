@@ -86,6 +86,7 @@ function HostilesLogic.spawn(definition, anchorCell)
         portraitPath = portraitPath,
         profileImage = profileImage,
         profileImagePath = profileImagePath,
+        conditions = {},
     }
 
     local healthy, healthError = HealthLogic.initialize(entity)

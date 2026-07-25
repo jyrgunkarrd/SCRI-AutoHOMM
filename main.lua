@@ -104,8 +104,10 @@ local PreparationLogic = require("src.sys.preparation_logic")
 local ReflexLogic = require("src.sys.reflex_logic")
 local MovementSpdLogic = require("src.sys.movement_spd_logic")
 local SteelCombat = require("src.sys.steel_combat")
+local FireCombat = require("src.sys.fire_combat")
 local TerrainLogic = require("src.sys.terrain_logic")
 local GlanceTooltips = require("src.sys.glance_tooltips")
+local ConditionLogic = require("src.sys.condition_logic")
 local Controls = require("src.input.controls")
 
 local DEFAULT_FONT_PATH = "assets/fonts/Furore.otf"
@@ -146,10 +148,19 @@ function love.load()
     ReflexLogic.reset()
     MovementSpdLogic.reset()
     SteelCombat.reset()
+    FireCombat.reset()
+    local ammunitionInitialized, ammunitionError =
+        FireCombat.initializeAmmunition(entities, true)
+
+    if not ammunitionInitialized then
+        error("Failed to initialize ammunition: " .. tostring(ammunitionError))
+    end
+
     HealthLogic.setDeathHandler(function(entity)
         ReflexLogic.removeEntity(entity)
         MovementSpdLogic.removeEntity(entity)
         SteelCombat.removeEntity(entity)
+        FireCombat.removeEntity(entity)
     end)
     TurnLogic.setResolutionHandler(function(phase, round)
         SpawnerLogic.deselect()
@@ -163,6 +174,8 @@ function love.load()
             return true
         elseif phase == "Steel" then
             return SteelCombat.beginSteel(entities, round)
+        elseif phase == "Fire" then
+            return FireCombat.beginFire(entities, round)
         end
 
         return true
@@ -174,6 +187,8 @@ function love.load()
             return not MovementSpdLogic.isProcessing()
         elseif phase == "Steel" then
             return not SteelCombat.isProcessing()
+        elseif phase == "Fire" then
+            return not FireCombat.isProcessing()
         end
 
         return true
@@ -182,6 +197,7 @@ function love.load()
         if phase == "End" then
             MovementSpdLogic.reset()
             SteelCombat.reset()
+            FireCombat.reset()
             return ReflexLogic.clearInitiativeSequence()
         end
 
@@ -225,8 +241,10 @@ function love.draw()
     FateLogic.draw()
     AgencyLogic.draw()
     TerrainLogic.drawTooltip()
+    ConditionLogic.draw(SpawnerLogic.getEntities())
     GlanceTooltips.draw(SpawnerLogic.getEntities())
     SteelCombat.draw()
+    FireCombat.draw()
     Controls.draw()
 end
 
@@ -235,6 +253,7 @@ function love.update(dt)
     ReflexLogic.update(dt)
     MovementSpdLogic.update(dt, SpawnerLogic.getEntities())
     SteelCombat.update(dt)
+    FireCombat.update(dt)
 
     if not PreparationLogic.isActive() then
         TurnLogic.update(dt)

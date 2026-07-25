@@ -124,6 +124,11 @@ function HealthLogic.setHp(entity, hp)
     entity.hp = clamp(hp, 0, entity.maxHp)
     entity.dead = entity.hp <= 0
 
+    if entity.dead then
+        entity.exhausted = false
+        entity.initiativeExhaustionPending = nil
+    end
+
     if entity.dead and not wasDead and deathHandler then
         deathHandler(entity)
     end

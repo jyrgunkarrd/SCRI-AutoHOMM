@@ -90,6 +90,10 @@ end
 local function getDeadPortraitShader()
     if not deadPortraitShader then
         deadPortraitShader = love.graphics.newShader([[
+            extern number grayAmount;
+            extern number whiteAmount;
+            extern number redAmount;
+
             vec4 effect(
                 vec4 color,
                 Image image,
@@ -101,7 +105,18 @@ local function getDeadPortraitShader()
                     pixel.rgb,
                     vec3(0.299, 0.587, 0.114)
                 );
-                return vec4(vec3(gray * 0.7), pixel.a) * color;
+                vec3 treated = mix(
+                    pixel.rgb,
+                    vec3(gray * 0.7),
+                    grayAmount
+                );
+                treated = mix(treated, vec3(1.0), whiteAmount);
+                treated = mix(
+                    treated,
+                    vec3(0.82, 0.015, 0.015),
+                    redAmount
+                );
+                return vec4(treated, pixel.a) * color;
             }
         ]])
     end
@@ -883,6 +898,7 @@ function AgentLogic.spawn(definition, anchorCell)
         portraitPath = portraitPath,
         profileImage = profileImage,
         profileImagePath = profileImagePath,
+        conditions = {},
     }
 
     local healthy, healthError = HealthLogic.initialize(entity)
@@ -901,9 +917,11 @@ function AgentLogic.draw(entity)
     local imageWidth, imageHeight = entity.portrait:getDimensions()
     local pulseScale = getPulseScale(entity)
         * (entity.initiativeEffectScale or 1)
+        * (entity.hazardDeathEffectScale or 1)
     local scale = diameter / math.max(imageWidth, imageHeight) * pulseScale
     local centerX = entity.movementVisualX or entity.anchor.x
-    local centerY = entity.movementVisualY or entity.anchor.y
+    local centerY = (entity.movementVisualY or entity.anchor.y)
+        + (entity.hazardDeathEffectOffsetY or 0)
     local offsetX = centerX - entity.anchor.x
     local offsetY = centerY - entity.anchor.y
 
@@ -942,7 +960,21 @@ function AgentLogic.draw(entity)
     )
 
     if entity.dead then
-        love.graphics.setShader(getDeadPortraitShader())
+        local shader = getDeadPortraitShader()
+
+        shader:send(
+            "grayAmount",
+            entity.hazardDeathGrayAmount or 1
+        )
+        shader:send(
+            "whiteAmount",
+            entity.hazardDeathWhiteAmount or 0
+        )
+        shader:send(
+            "redAmount",
+            entity.hazardDeathRedAmount or 0
+        )
+        love.graphics.setShader(shader)
     end
 
     love.graphics.draw(
@@ -973,22 +1005,24 @@ function AgentLogic.draw(entity)
         buildHexPoints(centerX, centerY, outlineRadius)
     )
 
-    local gauges = AgentLogic.getGaugeDescriptors(entity)
-    local healthGauge = gauges[1]
-    local blockGauge = gauges[2]
+    if not entity.hazardDeathHideGauges then
+        local gauges = AgentLogic.getGaugeDescriptors(entity)
+        local healthGauge = gauges[1]
+        local blockGauge = gauges[2]
 
-    HealthLogic.drawGauge(
-        entity,
-        healthGauge.x,
-        healthGauge.y,
-        healthGauge.radius
-    )
-    BlockLogic.drawGauge(
-        entity,
-        blockGauge.x,
-        blockGauge.y,
-        blockGauge.radius
-    )
+        HealthLogic.drawGauge(
+            entity,
+            healthGauge.x,
+            healthGauge.y,
+            healthGauge.radius
+        )
+        BlockLogic.drawGauge(
+            entity,
+            blockGauge.x,
+            blockGauge.y,
+            blockGauge.radius
+        )
+    end
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setLineWidth(1)
 end

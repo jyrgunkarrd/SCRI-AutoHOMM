@@ -1,4 +1,5 @@
 local BattleMap = require("src.sys.battle_map")
+local ConditionLogic = require("src.sys.condition_logic")
 
 local GlanceTooltips = {}
 
@@ -188,6 +189,10 @@ function GlanceTooltips.draw(entities)
     local entity = getHoveredEntity(entities)
 
     if not entity then
+        return 0
+    end
+
+    if ConditionLogic.isBadgeHovered(entity) then
         return 0
     end
 

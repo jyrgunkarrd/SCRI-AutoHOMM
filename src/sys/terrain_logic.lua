@@ -199,6 +199,32 @@ function TerrainLogic.isHazardCell(cellOrKey)
         or false
 end
 
+function TerrainLogic.isDeathPitCell(cellOrKey)
+    local definition = TerrainLogic.getDefinition(cellOrKey)
+
+    return definition
+        and normalizeTerrainType(definition.type) == "hazard"
+        and isDeathPitValue(definition.value)
+        or false
+end
+
+-- Death pits sort above every numeric hazard when forced movement chooses
+-- between possible landing spaces.
+function TerrainLogic.getHazardDamage(cellOrKey)
+    local definition = TerrainLogic.getDefinition(cellOrKey)
+
+    if not definition
+        or normalizeTerrainType(definition.type) ~= "hazard" then
+        return nil
+    end
+
+    if isDeathPitValue(definition.value) then
+        return math.huge
+    end
+
+    return definition.value
+end
+
 function TerrainLogic.footprintHasHazard(footprint)
     for _, cell in ipairs(footprint or {}) do
         if TerrainLogic.isHazardCell(cell) then
