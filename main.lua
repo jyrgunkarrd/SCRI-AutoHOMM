@@ -92,190 +92,36 @@ if hasArg("--map-editor") then
     return
 end
 
-local BattleMap = require("src.sys.battle_map")
-local GameMap = require("src.sys.game_map")
-local SpawnerLogic = require("src.sys.spawner_logic")
-local FateLogic = require("src.sys.fate_logic")
-local AgencyLogic = require("src.sys.agency_logic")
-local TurnLogic = require("src.sys.turn_logic")
-local StartLogic = require("src.sys.start_logic")
-local HealthLogic = require("src.sys.health_logic")
-local PreparationLogic = require("src.sys.preparation_logic")
-local ReflexLogic = require("src.sys.reflex_logic")
-local MovementSpdLogic = require("src.sys.movement_spd_logic")
-local SteelCombat = require("src.sys.steel_combat")
-local FireCombat = require("src.sys.fire_combat")
-local TerrainLogic = require("src.sys.terrain_logic")
-local GlanceTooltips = require("src.sys.glance_tooltips")
-local ConditionLogic = require("src.sys.condition_logic")
-local Controls = require("src.input.controls")
-
-local DEFAULT_FONT_PATH = "assets/fonts/Furore.otf"
-local DEFAULT_FONT_SIZE = 18
+local GameStates = require("src.states.game_states")
 
 function love.load()
-    love.graphics.setBackgroundColor(0.055, 0.065, 0.09)
-    love.graphics.setLineStyle("smooth")
-    love.graphics.setFont(
-        love.graphics.newFont(DEFAULT_FONT_PATH, DEFAULT_FONT_SIZE)
-    )
-    TurnLogic.reset()
-
-    local map, mapError = GameMap.loadDevelopmentMap()
-
-    if not map then
-        error("Failed to load development map: " .. tostring(mapError))
-    end
-
-    local entities, spawnError = SpawnerLogic.loadMap(map)
-
-    if not entities then
-        error("Failed to spawn map entities: " .. tostring(spawnError))
-    end
-
-    local fateStacks, fateError = FateLogic.loadEntities(entities)
-
-    if not fateStacks then
-        error("Failed to load fate stacks: " .. tostring(fateError))
-    end
-
-    local agencyStacks, agencyError = AgencyLogic.loadEntities(entities)
-
-    if not agencyStacks then
-        error("Failed to load Agency stacks: " .. tostring(agencyError))
-    end
-
-    ReflexLogic.reset()
-    MovementSpdLogic.reset()
-    SteelCombat.reset()
-    FireCombat.reset()
-    local ammunitionInitialized, ammunitionError =
-        FireCombat.initializeAmmunition(entities, true)
-
-    if not ammunitionInitialized then
-        error("Failed to initialize ammunition: " .. tostring(ammunitionError))
-    end
-
-    HealthLogic.setDeathHandler(function(entity)
-        ReflexLogic.removeEntity(entity)
-        MovementSpdLogic.removeEntity(entity)
-        SteelCombat.removeEntity(entity)
-        FireCombat.removeEntity(entity)
-    end)
-    TurnLogic.setResolutionHandler(function(phase, round)
-        SpawnerLogic.deselect()
-
-        if phase == "Start" then
-            return StartLogic.resolve(entities)
-        elseif phase == "Reflex" then
-            return ReflexLogic.resolveRound(entities, round)
-        elseif phase == "March" then
-            MovementSpdLogic.beginMarch(entities, round)
-            return true
-        elseif phase == "Steel" then
-            return SteelCombat.beginSteel(entities, round)
-        elseif phase == "Fire" then
-            return FireCombat.beginFire(entities, round)
-        end
-
-        return true
-    end)
-    TurnLogic.setResolutionReadyCheck(function(phase)
-        if phase == "Reflex" then
-            return not ReflexLogic.isAnimating()
-        elseif phase == "March" then
-            return not MovementSpdLogic.isProcessing()
-        elseif phase == "Steel" then
-            return not SteelCombat.isProcessing()
-        elseif phase == "Fire" then
-            return not FireCombat.isProcessing()
-        end
-
-        return true
-    end)
-    TurnLogic.setCleanupHandler(function(phase)
-        if phase == "End" then
-            MovementSpdLogic.reset()
-            SteelCombat.reset()
-            FireCombat.reset()
-            return ReflexLogic.clearInitiativeSequence()
-        end
-
-        ReflexLogic.repopulateInitiativeSequence()
-        return true
-    end)
-
-    if not PreparationLogic.loadMap(map) then
-        TurnLogic.begin()
-    end
+    GameStates.load()
 end
 
 function love.draw()
-    BattleMap.draw(GameMap.getColorMap())
-    PreparationLogic.drawMapOverlay()
-
-    if not PreparationLogic.isActive() then
-        if MovementSpdLogic.isProcessing() then
-            MovementSpdLogic.draw()
-        else
-            SpawnerLogic.drawMovementOverlay()
-        end
-    end
-
-    SpawnerLogic.drawEntities()
-    ReflexLogic.drawMapEffects()
-    BattleMap.drawHover()
-    SpawnerLogic.drawInterface()
-
-    if PreparationLogic.isActive() then
-        PreparationLogic.draw(FateLogic.getButtonGroupBounds())
-    else
-        TurnLogic.draw(FateLogic.getButtonGroupBounds())
-    end
-
-    ReflexLogic.draw(
-        TurnLogic.getRound(),
-        FateLogic.getButtonBounds(),
-        FateLogic.getHostileButtonBounds()
-    )
-    FateLogic.draw()
-    AgencyLogic.draw()
-    TerrainLogic.drawTooltip()
-    ConditionLogic.draw(SpawnerLogic.getEntities())
-    GlanceTooltips.draw(SpawnerLogic.getEntities())
-    SteelCombat.draw()
-    FireCombat.draw()
-    Controls.draw()
+    GameStates.draw()
 end
 
 function love.update(dt)
-    SpawnerLogic.update(dt)
-    ReflexLogic.update(dt)
-    MovementSpdLogic.update(dt, SpawnerLogic.getEntities())
-    SteelCombat.update(dt)
-    FireCombat.update(dt)
-
-    if not PreparationLogic.isActive() then
-        TurnLogic.update(dt)
-    end
+    GameStates.update(dt)
 end
 
 function love.keypressed(key, scancode, isRepeat)
-    Controls.keypressed(key, scancode, isRepeat)
+    GameStates.keypressed(key, scancode, isRepeat)
 end
 
 function love.mousepressed(x, y, button, isTouch, presses)
-    Controls.mousepressed(x, y, button, isTouch, presses)
+    GameStates.mousepressed(x, y, button, isTouch, presses)
 end
 
 function love.mousereleased(x, y, button, isTouch, presses)
-    Controls.mousereleased(x, y, button, isTouch, presses)
+    GameStates.mousereleased(x, y, button, isTouch, presses)
 end
 
 function love.mousemoved(x, y, dx, dy, isTouch)
-    Controls.mousemoved(x, y, dx, dy, isTouch)
+    GameStates.mousemoved(x, y, dx, dy, isTouch)
 end
 
 function love.wheelmoved(x, y)
-    Controls.wheelmoved(x, y)
+    GameStates.wheelmoved(x, y)
 end

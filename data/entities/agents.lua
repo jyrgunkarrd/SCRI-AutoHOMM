@@ -2,7 +2,419 @@
 -- agent definitions
 
 local agents = {
+    
+    -- Captains
 
+    {
+
+        id = "CPT_SAW",
+        entity_type = "AGENT",
+        size = 1,
+        name = "Cpt. Saw",
+        slots = {
+
+            "Head",
+            "Body",
+            "Hand",
+            "Hand",
+            "Legs",
+            "Jewelry",
+            "Belt",
+            "Belt",
+            "Ally",
+            "Ally",
+
+        },
+        stats = {
+            {hp = 3},
+            {str = 1},
+            {agi = 1},
+            {spd = 0},
+            {tgh = 0},
+            {lex = 0}, 
+        },
+        steel_atk = {
+            
+            { rng = 1 },
+        
+        },
+        fire_atk = {
+
+            { min_rng = 0},
+            { rng = 3 },
+
+        },
+        ammo = 3,
+        shout = "Lock and load.",
+        slain = "masc",
+        bhav = "aggro",
+        spec_tag = {
+
+            "Captain",
+
+        },
+        skill_trees = {
+
+            tab1ID = "MAM_TREE_K-J",
+            tab2ID = "MAM_TREE_KIM",
+            tab3ID = "MAM_TREE_T-Y",
+
+        },
+
+    },
+
+    {
+
+        id = "CPT_SABER",
+        entity_type = "AGENT",
+        size = 1,
+        name = "Cpt. Saber",
+        slots = {
+
+            "Head",
+            "Body",
+            "Hand",
+            "Hand",
+            "Legs",
+            "Jewelry",
+            "Belt",
+            "Belt",
+            "Ally",
+            "Ally",
+
+        },
+        stats = {
+            {hp = 3},
+            {str = 1},
+            {agi = 1},
+            {spd = 0},
+            {tgh = 0},
+            {lex = 0}, 
+        },
+        steel_atk = {
+            
+            { rng = 1 },
+        
+        },
+        fire_atk = {
+
+            { min_rng = 0},
+            { rng = 3 },
+
+        },
+        ammo = 3,
+        shout = "Stay sharp.",
+        slain = "fem",
+        bhav = "aggro",
+        spec_tag = {
+
+            "Captain",
+
+        },
+        skill_trees = {
+
+            tab1ID = "MAM_TREE_K-J",
+            tab2ID = "MAM_TREE_KIM",
+            tab3ID = "MAM_TREE_T-Y",
+
+        },
+
+    },
+
+    {
+
+        id = "CPT_AUTUMN",
+        entity_type = "AGENT",
+        size = 1,
+        name = "Cpt. Autumn",
+        slots = {
+
+            "Head",
+            "Body",
+            "Hand",
+            "Hand",
+            "Legs",
+            "Jewelry",
+            "Belt",
+            "Belt",
+            "Ally",
+            "Ally",
+
+        },
+        stats = {
+            {hp = 3},
+            {str = 1},
+            {agi = 1},
+            {spd = 0},
+            {tgh = 0},
+            {lex = 0}, 
+        },
+        steel_atk = {
+            
+            { rng = 1 },
+        
+        },
+        fire_atk = {
+
+            { min_rng = 0},
+            { rng = 3 },
+
+        },
+        ammo = 3,
+        shout = "Drop the hammer.",
+        slain = "masc",
+        bhav = "aggro",
+        spec_tag = {
+
+            "Captain",
+
+        },
+        skill_trees = {
+
+            tab1ID = "MAM_TREE_K-J",
+            tab2ID = "MAM_TREE_KIM",
+            tab3ID = "MAM_TREE_T-Y",
+
+        },
+
+    },
+
+    {
+
+        id = "CPT_EMBERS",
+        entity_type = "AGENT",
+        size = 1,
+        name = "Cpt. Embers",
+        slots = {
+
+            "Head",
+            "Body",
+            "Hand",
+            "Hand",
+            "Legs",
+            "Jewelry",
+            "Belt",
+            "Belt",
+            "Ally",
+            "Ally",
+
+        },
+        stats = {
+            {hp = 3},
+            {str = 1},
+            {agi = 1},
+            {spd = 0},
+            {tgh = 0},
+            {lex = 0}, 
+        },
+        steel_atk = {
+            
+            { rng = 1 },
+        
+        },
+        fire_atk = {
+
+            { min_rng = 0},
+            { rng = 3 },
+
+        },
+        ammo = 3,
+        shout = "Engage.",
+        slain = "fem",
+        bhav = "aggro",
+        spec_tag = {
+
+            "Captain",
+
+        },
+        skill_trees = {
+
+            tab1ID = "MAM_TREE_K-J",
+            tab2ID = "MAM_TREE_KIM",
+            tab3ID = "MAM_TREE_T-Y",
+
+        },
+
+    },
+
+    {
+
+        id = "CPT_FINCH",
+        entity_type = "AGENT",
+        size = 1,
+        name = "Cpt. Finch",
+        slots = {
+
+            "Head",
+            "Body",
+            "Hand",
+            "Hand",
+            "Legs",
+            "Jewelry",
+            "Belt",
+            "Belt",
+            "Ally",
+            "Ally",
+
+        },
+        stats = {
+            {hp = 3},
+            {str = 1},
+            {agi = 1},
+            {spd = 0},
+            {tgh = 0},
+            {lex = 0}, 
+        },
+        steel_atk = {
+            
+            { rng = 1 },
+        
+        },
+        fire_atk = {
+
+            { min_rng = 0},
+            { rng = 3 },
+
+        },
+        ammo = 3,
+        shout = "On screen.",
+        slain = "fem",
+        bhav = "aggro",
+        spec_tag = {
+
+            "Captain",
+
+        },
+        skill_trees = {
+
+            tab1ID = "MAM_TREE_K-J",
+            tab2ID = "MAM_TREE_KIM",
+            tab3ID = "MAM_TREE_T-Y",
+
+        },
+
+    },
+
+    {
+
+        id = "CPT_SMOKE",
+        entity_type = "AGENT",
+        size = 1,
+        name = "Cpt. Smoke",
+        slots = {
+
+            "Head",
+            "Body",
+            "Hand",
+            "Hand",
+            "Legs",
+            "Jewelry",
+            "Belt",
+            "Belt",
+            "Ally",
+            "Ally",
+
+        },
+        stats = {
+            {hp = 3},
+            {str = 1},
+            {agi = 1},
+            {spd = 0},
+            {tgh = 0},
+            {lex = 0}, 
+        },
+        steel_atk = {
+            
+            { rng = 1 },
+        
+        },
+        fire_atk = {
+
+            { min_rng = 0},
+            { rng = 3 },
+
+        },
+        ammo = 3,
+        shout = "On deck.",
+        slain = "masc",
+        bhav = "aggro",
+        spec_tag = {
+
+            "Captain",
+
+        },
+        skill_trees = {
+
+            tab1ID = "MAM_TREE_K-J",
+            tab2ID = "MAM_TREE_KIM",
+            tab3ID = "MAM_TREE_T-Y",
+
+        },
+
+    },
+
+    {
+
+        id = "CPT_AATTIQ",
+        entity_type = "AGENT",
+        size = 1,
+        name = "Cpt. Aattiq",
+        slots = {
+
+            "Head",
+            "Body",
+            "Hand",
+            "Hand",
+            "Legs",
+            "Jewelry",
+            "Belt",
+            "Belt",
+            "Ally",
+            "Ally",
+
+        },
+        stats = {
+            {hp = 3},
+            {str = 1},
+            {agi = 1},
+            {spd = 0},
+            {tgh = 0},
+            {lex = 0}, 
+        },
+        steel_atk = {
+            
+            { rng = 1 },
+        
+        },
+        fire_atk = {
+
+            { min_rng = 0},
+            { rng = 3 },
+
+        },
+        ammo = 3,
+        shout = "Kill 'em all.",
+        slain = "fem",
+        bhav = "aggro",
+        spec_tag = {
+
+            "Captain",
+
+        },
+        skill_trees = {
+
+            tab1ID = "MAM_TREE_K-J",
+            tab2ID = "MAM_TREE_KIM",
+            tab3ID = "MAM_TREE_T-Y",
+
+        },
+
+    },
+
+
+
+
+    -- Field Agents
     {
 
         id = "AGENT_MAM",
@@ -38,6 +450,7 @@ local agents = {
         },
         shout = "As a river bends.",
         slain = "masc",
+        bhav = "aggro",
         skill_trees = {
 
             tab1ID = "MAM_TREE_K-J",
@@ -104,7 +517,7 @@ local agents = {
 
     {
 
-        id = "SAW",
+        id = "AGENT_SNOW",
         name = "Snow &\nMiss White",
         slots = {
 

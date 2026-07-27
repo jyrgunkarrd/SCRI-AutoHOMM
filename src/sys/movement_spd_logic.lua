@@ -1,4 +1,5 @@
 local BattleMap = require("src.sys.battle_map")
+local BehaviorLogic = require("src.sys.behavior_logic")
 local MapPathfindingLogic = require("src.sys.map_pathfinding_logic")
 local ReflexLogic = require("src.sys.reflex_logic")
 local Sfx = require("src.sys.sfx")
@@ -131,7 +132,8 @@ local function selectDestination(entity, target, speed)
         target.footprint
     )
 
-    if startingDistance <= 1 then
+    if startingDistance <= 1
+        and BehaviorLogic.get(entity) == BehaviorLogic.AGGRO then
         return entity.anchor, { entity.anchor }, {}
     end
 
@@ -150,9 +152,7 @@ local function selectDestination(entity, target, speed)
         return entity.anchor, { entity.anchor }, {}
     end
 
-    local destination = entity.anchor
-    local bestDistance = startingDistance
-    local bestCost = 0
+    local candidates = {}
 
     for _, cell in ipairs(reachable) do
         local footprint = SpawnerLogic.canEntityOccupy(entity, cell)
@@ -164,17 +164,20 @@ local function selectDestination(entity, target, speed)
             )
             local cost = costs[cell.key] or 0
 
-            if distance < bestDistance
-                or distance == bestDistance and cost > bestCost
-                or distance == bestDistance
-                    and cost == bestCost
-                    and cell.key < destination.key then
-                destination = cell
-                bestDistance = distance
-                bestCost = cost
-            end
+            candidates[#candidates + 1] = {
+                cell = cell,
+                distance = distance,
+                cost = cost,
+            }
         end
     end
+
+    local selected = BehaviorLogic.selectMovementCandidate(
+        entity,
+        startingDistance,
+        candidates
+    )
+    local destination = selected and selected.cell or entity.anchor
 
     local path = { entity.anchor }
 

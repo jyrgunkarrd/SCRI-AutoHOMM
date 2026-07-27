@@ -1289,6 +1289,15 @@ local function getProjectileImage(entity)
         )
     end
 
+    for _, tag in ipairs(entity.definition.spec_tag or {}) do
+        if type(tag) == "string" and tag:lower() == "captain" then
+            candidates[#candidates + 1] = (
+                "%s/CPT.webp"
+            ):format(projectileDirectory)
+            break
+        end
+    end
+
     for _, path in ipairs(candidates) do
         if love.filesystem.getInfo(path, "file") then
             local loaded, image = pcall(ImageLoader.newImage, path)

@@ -23,6 +23,10 @@ local SLOT_REGION_HEIGHT = 560
 local PANEL_GAP = 14
 local TILE_GAP = 8
 local TILE_HEIGHT = 56
+local TILE_PADDING = 7
+local TILE_SLOT_SIZE = 40
+local TILE_SLOT_GAP = 4
+local TILE_SLOT_TEXT_GAP = 5
 local SCROLL_STEP = 72
 
 local COLORS = {
@@ -40,6 +44,8 @@ local COLORS = {
     failTile = { 0, 0, 0, 1 },
     criticalTile = { 1, 165 / 255, 0, 1 },
     criticalText = { 0, 0, 0, 1 },
+    tileSlot = { 0, 0, 0, 0.34 },
+    tileSlotBorder = { 0.82, 0.85, 0.9, 0.9 },
     scrollTrack = { 0.03, 0.035, 0.05, 1 },
     scrollThumb = { 0.56, 0.62, 0.72, 1 },
 }
@@ -396,6 +402,31 @@ local function getTileValueLabel(definition)
     return "0"
 end
 
+local function drawFittedText(text, x, y, width, alignment)
+    if width <= 0 then
+        return
+    end
+
+    text = tostring(text)
+
+    local font = love.graphics.getFont()
+    local naturalWidth = font:getWidth(text)
+    local scale = naturalWidth > 0
+        and math.min(1, width / naturalWidth)
+        or 1
+    local drawX = x
+
+    if alignment == "right" then
+        drawX = x + width - naturalWidth * scale
+    end
+
+    love.graphics.push()
+    love.graphics.translate(drawX, y)
+    love.graphics.scale(scale, scale)
+    love.graphics.print(text, 0, 0)
+    love.graphics.pop()
+end
+
 local function drawTile(tile, x, y, width, opacity)
     opacity = opacity or 1
     local tileColor = getTileColor(tile.definition)
@@ -415,6 +446,50 @@ local function drawTile(tile, x, y, width, opacity)
     )
     love.graphics.setLineWidth(1)
     love.graphics.rectangle("line", x, y, width, TILE_HEIGHT, 4, 4)
+
+    local slotX = x + TILE_PADDING
+    local slotY = y + (TILE_HEIGHT - TILE_SLOT_SIZE) / 2
+
+    for slotIndex = 0, 1 do
+        local drawX = slotX
+            + slotIndex * (TILE_SLOT_SIZE + TILE_SLOT_GAP)
+
+        love.graphics.setColor(
+            COLORS.tileSlot[1],
+            COLORS.tileSlot[2],
+            COLORS.tileSlot[3],
+            COLORS.tileSlot[4] * opacity
+        )
+        love.graphics.rectangle(
+            "fill",
+            drawX,
+            slotY,
+            TILE_SLOT_SIZE,
+            TILE_SLOT_SIZE
+        )
+        love.graphics.setColor(
+            COLORS.tileSlotBorder[1],
+            COLORS.tileSlotBorder[2],
+            COLORS.tileSlotBorder[3],
+            COLORS.tileSlotBorder[4] * opacity
+        )
+        love.graphics.rectangle(
+            "line",
+            drawX,
+            slotY,
+            TILE_SLOT_SIZE,
+            TILE_SLOT_SIZE
+        )
+    end
+
+    local textX = slotX
+        + TILE_SLOT_SIZE * 2
+        + TILE_SLOT_GAP
+        + TILE_SLOT_TEXT_GAP
+    local textWidth = math.max(
+        0,
+        x + width - TILE_PADDING - textX
+    )
     local textColor = tile.definition.crit
         and COLORS.criticalText
         or COLORS.text
@@ -425,7 +500,6 @@ local function drawTile(tile, x, y, width, opacity)
         textColor[3],
         textColor[4] * opacity
     )
-    love.graphics.printf(tile.id, x + 7, y + 7, width - 14, "left")
 
     local previousFont
 
@@ -434,11 +508,11 @@ local function drawTile(tile, x, y, width, opacity)
         love.graphics.setFont(iconFont)
     end
 
-    love.graphics.printf(
+    drawFittedText(
         getTileValueLabel(tile.definition),
-        x + 7,
+        textX,
         y + 29,
-        width - 14,
+        textWidth,
         "right"
     )
 

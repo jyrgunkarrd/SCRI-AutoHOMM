@@ -45,6 +45,7 @@ local hostiles = {
         ammo = 2,
         shout = "I proudly serve.",
         slain = "masc",
+        bhav = "skirm",
     },
 
 }
