@@ -60,6 +60,12 @@ local agents = {
             tab3ID = "MAM_TREE_T-Y",
 
         },
+        plans = {
+
+            { planid = "FMISS", qty = 5 },
+            { planid = "SILVER", qty = 25 },
+
+        },
 
     },
 
@@ -118,6 +124,12 @@ local agents = {
             tab3ID = "MAM_TREE_T-Y",
 
         },
+        plans = {
+
+            { planid = "STIM", qty = 5 },
+            { planid = "BULLSEYE", qty = 25 },
+
+        },
 
     },
 
@@ -174,6 +186,12 @@ local agents = {
             tab1ID = "MAM_TREE_K-J",
             tab2ID = "MAM_TREE_KIM",
             tab3ID = "MAM_TREE_T-Y",
+
+        },
+        plans = {
+
+            { planid = "TWISTER", qty = 5 },
+            { planid = "BOLT", qty = 25 },
 
         },
 

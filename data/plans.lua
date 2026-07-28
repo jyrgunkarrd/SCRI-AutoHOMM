@@ -101,6 +101,20 @@ local plans = {
 
     },
 
+    {
+
+        id = "DNGZONE",
+        name = "Danger Close",
+
+    },
+
+    {
+
+        id = "INDIGO",
+        name = "Team Indigo",
+
+    },
+
 }
 
 return plans
